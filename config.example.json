@@ -56,10 +56,10 @@
 
   "s3": {
     "enabled": false,
-    "bucket": "",
+    "bucket": "deepspaceplace-allsky",
     "region": "ap-southeast-2",
-    "prefix": "skycam/",
-    "access_key_id": "",
+    "prefix": "allsky/",
+    "access_key_id": "CHANGE-ME (the allsky-uploader key)",
     "secret_access_key": "",
     "public_base_url": "",
     "latest_every": "5m",

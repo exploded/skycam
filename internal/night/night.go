@@ -38,13 +38,14 @@ type Result struct {
 	Timelapse  string
 	Keogram    string
 	Startrails string
+	Thumbnail  string // a small still for video listings
 	Report     string
 }
 
 // Files lists the products that exist, as full paths.
 func (r Result) Files() []string {
 	var out []string
-	for _, n := range []string{r.Timelapse, r.Keogram, r.Startrails, r.Report} {
+	for _, n := range []string{r.Timelapse, r.Keogram, r.Startrails, r.Thumbnail, r.Report} {
 		if n != "" {
 			out = append(out, filepath.Join(r.Dir, n))
 		}
@@ -123,6 +124,12 @@ func (p *Processor) Process(ctx context.Context, night string) (Result, error) {
 				p.Log.Warn("writing startrails", "err", err)
 			}
 		}
+	}
+
+	if err := thumbnail(filepath.Join(p.Cfg.ImagesDir(), night, names[len(names)/2]), filepath.Join(res.Dir, ThumbnailName(night))); err != nil {
+		p.Log.Warn("thumbnail failed", "night", night, "err", err)
+	} else {
+		res.Thumbnail = ThumbnailName(night)
 	}
 
 	if p.Cfg.Timelapse.Enabled {
@@ -419,4 +426,26 @@ func (p *Processor) CatchUp(ctx context.Context, active string) {
 			p.Log.Warn("catch-up", "night", n, "err", err)
 		}
 	}
+}
+
+// ThumbnailName is the night's thumbnail file in its products folder.
+func ThumbnailName(night string) string { return "thumbnail-" + night + ".jpg" }
+
+// thumbnail scales the middle frame of the night to 320 pixels wide, as a
+// poster for video listings (allsky's videos/thumbnails/).
+func thumbnail(src, dst string) error {
+	f, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	img, err := jpeg.Decode(f)
+	if err != nil {
+		return err
+	}
+	b := img.Bounds()
+	const w = 320
+	out := image.NewRGBA(image.Rect(0, 0, w, b.Dy()*w/b.Dx()))
+	xdraw.ApproxBiLinear.Scale(out, out.Bounds(), img, b, xdraw.Src, nil)
+	return writeJPEG(dst, out)
 }

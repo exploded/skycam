@@ -61,6 +61,26 @@ func (u *Uploader) key(parts ...string) string {
 	return strings.TrimLeft(u.cfg.S3.Prefix+path.Join(parts...), "/")
 }
 
+// productKeys maps a night's product files to their S3 keys. The layout is
+// allsky's, so deepspaceplace-allsky carries on from the archive allsky
+// built: videos/, videos/thumbnails/, keograms/, startrails/.
+func (u *Uploader) productKeys(res night.Result) map[string]string {
+	keys := map[string]string{}
+	if res.Timelapse != "" {
+		keys[res.Timelapse] = u.key("videos", res.Timelapse)
+	}
+	if res.Thumbnail != "" {
+		keys[res.Thumbnail] = u.key("videos", "thumbnails", "allsky-"+res.Night+".jpg")
+	}
+	if res.Keogram != "" {
+		keys[res.Keogram] = u.key("keograms", res.Keogram)
+	}
+	if res.Startrails != "" {
+		keys[res.Startrails] = u.key("startrails", res.Startrails)
+	}
+	return keys
+}
+
 // PublicURL is how a browser reaches an S3 object.
 func (u *Uploader) PublicURL(key string) string {
 	base := u.cfg.S3.PublicBaseURL
@@ -77,7 +97,7 @@ func (u *Uploader) TimelapseURL(res night.Result) string {
 		return ""
 	}
 	if u.s3 != nil {
-		return u.PublicURL(u.key("nights", res.Night, res.Timelapse))
+		return u.PublicURL(u.key("videos", res.Timelapse))
 	}
 	return res.Timelapse
 }
@@ -129,7 +149,7 @@ func (u *Uploader) Run(ctx context.Context, hub *capture.Hub) {
 			now := time.Now()
 			if u.s3 != nil {
 				if now.Sub(lastS3) >= u.cfg.S3.LatestEvery.D() {
-					if err := u.put(ctx, u.key("latest", "image.jpg"), r.JPEG, "image/jpeg", "no-cache"); err != nil {
+					if err := u.put(ctx, u.key("image.jpg"), r.JPEG, "image/jpeg", "no-cache"); err != nil {
 						u.log.Warn("s3 latest image", "err", err)
 					} else {
 						lastS3 = now
@@ -303,9 +323,9 @@ type NightJSON struct {
 func (u *Uploader) Night(ctx context.Context, res night.Result) {
 	if u.s3 != nil {
 		var failed bool
-		for _, f := range res.Files() {
-			if err := u.putFile(ctx, u.key("nights", res.Night, filepath.Base(f)), f); err != nil {
-				u.log.Warn("s3 product", "file", filepath.Base(f), "err", err)
+		for name, key := range u.productKeys(res) {
+			if err := u.putFile(ctx, key, filepath.Join(res.Dir, name)); err != nil {
+				u.log.Warn("s3 product", "file", name, "err", err)
 				failed = true
 			}
 		}
@@ -322,10 +342,10 @@ func (u *Uploader) Night(ctx context.Context, res night.Result) {
 		n := NightJSON{Night: res.Night, Summary: summary(page), ReportHTML: string(page), TimelapseURL: u.TimelapseURL(res)}
 		if u.s3 != nil {
 			if res.Keogram != "" {
-				n.KeogramURL = u.PublicURL(u.key("nights", res.Night, res.Keogram))
+				n.KeogramURL = u.PublicURL(u.key("keograms", res.Keogram))
 			}
 			if res.Startrails != "" {
-				n.StartrailsURL = u.PublicURL(u.key("nights", res.Night, res.Startrails))
+				n.StartrailsURL = u.PublicURL(u.key("startrails", res.Startrails))
 			}
 		}
 		js, _ := json.Marshal(n)
@@ -360,6 +380,9 @@ func (u *Uploader) CatchUp(ctx context.Context) {
 		}
 		res := night.Result{Night: n.Night, Dir: filepath.Join(u.cfg.ProductsDir(), n.Night), Frames: int(n.Frames),
 			Timelapse: n.Timelapse, Keogram: n.Keogram, Startrails: n.Startrails, Report: n.Report}
+		if _, err := os.Stat(filepath.Join(res.Dir, night.ThumbnailName(n.Night))); err == nil {
+			res.Thumbnail = night.ThumbnailName(n.Night)
+		}
 		if _, err := os.Stat(res.Dir); err != nil {
 			continue
 		}

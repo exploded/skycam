@@ -249,9 +249,12 @@ func Default() Config {
 			IdleStop:    Duration(60 * time.Second),
 			MaxExposure: Duration(500 * time.Millisecond),
 		},
+		// allsky's bucket and layout; the allsky-uploader IAM user can write
+		// under allsky/ and the bucket policy makes it public.
 		S3: S3{
+			Bucket:      "deepspaceplace-allsky",
 			Region:      "ap-southeast-2",
-			Prefix:      "skycam/",
+			Prefix:      "allsky/",
 			LatestEvery: Duration(5 * time.Minute),
 		},
 		Relay: Relay{
