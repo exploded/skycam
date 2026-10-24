@@ -17,10 +17,11 @@ type Hub struct {
 	liveSeen  time.Time                // last local viewer or remote demand
 	liveSince time.Time                // when the current session started; zero if none
 	liveOn    bool
+	wake      chan struct{} // closed when someone starts wanting live frames
 }
 
 func NewHub() *Hub {
-	return &Hub{subs: map[chan *Record]struct{}{}, live: map[chan []byte]struct{}{}, taps: map[chan []byte]struct{}{}}
+	return &Hub{subs: map[chan *Record]struct{}{}, live: map[chan []byte]struct{}{}, taps: map[chan []byte]struct{}{}, wake: make(chan struct{})}
 }
 
 // Publish makes r the latest frame and offers it to every subscriber. A
@@ -64,6 +65,7 @@ func (h *Hub) Watch() (<-chan []byte, func()) {
 	h.mu.Lock()
 	h.live[ch] = struct{}{}
 	h.liveSeen = time.Now()
+	h.wakeLocked()
 	h.mu.Unlock()
 	return ch, func() {
 		h.mu.Lock()
@@ -78,6 +80,7 @@ func (h *Hub) Watch() (<-chan []byte, func()) {
 func (h *Hub) Demand() {
 	h.mu.Lock()
 	h.liveSeen = time.Now()
+	h.wakeLocked()
 	h.mu.Unlock()
 }
 
@@ -145,4 +148,18 @@ func (h *Hub) LiveSubscribe() (<-chan []byte, func()) {
 		delete(h.taps, ch)
 		h.mu.Unlock()
 	}
+}
+
+// LiveWake returns a channel that is closed the next time a viewer asks
+// for live frames, so the capture loop can cut its wait between stills
+// short instead of making the viewer sit through it.
+func (h *Hub) LiveWake() <-chan struct{} {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.wake
+}
+
+func (h *Hub) wakeLocked() {
+	close(h.wake)
+	h.wake = make(chan struct{})
 }

@@ -150,7 +150,8 @@ func (s *Server) latest() latestView {
 	age := time.Since(r.Time)
 	v.Age = ago(age)
 	// Three missed frames at the slowest cadence means capture has stalled.
-	v.Stale = age > 3*max(s.Cfg.Exposure.Day.Interval.D(), s.Cfg.Exposure.Night.Interval.D())+r.Exposure
+	// Stills pause while live mode runs; that isn't a stall.
+	v.Stale = !v.Live && age > 3*max(s.Cfg.Exposure.Day.Interval.D(), s.Cfg.Exposure.Night.Interval.D())+r.Exposure
 	v.Stamp = r.Time.UnixMilli()
 	v.ImageURL = fmt.Sprintf("/image.jpg?t=%d", v.Stamp)
 	return v

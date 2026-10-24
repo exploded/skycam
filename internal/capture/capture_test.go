@@ -186,3 +186,25 @@ func TestHubLiveDemand(t *testing.T) {
 		t.Fatal("live should stop after the idle period")
 	}
 }
+
+func TestLiveWakeOnViewer(t *testing.T) {
+	h := NewHub()
+	wake := h.LiveWake()
+	select {
+	case <-wake:
+		t.Fatal("woke with no viewer")
+	default:
+	}
+	_, stop := h.Watch()
+	defer stop()
+	select {
+	case <-wake:
+	case <-time.After(time.Second):
+		t.Fatal("a new viewer did not wake the loop")
+	}
+	select {
+	case <-h.LiveWake():
+		t.Fatal("the next wake channel should start open")
+	default:
+	}
+}

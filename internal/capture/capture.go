@@ -172,7 +172,7 @@ func (l *Loop) Run(ctx context.Context) error {
 			continue
 		}
 		failures = 0
-		l.clock.Sleep(ctx, l.mode().Interval.D()-time.Since(start))
+		l.waitNext(ctx, l.mode().Interval.D()-time.Since(start))
 	}
 }
 
@@ -445,4 +445,23 @@ func EnsureDirs(cfg config.Config) error {
 		}
 	}
 	return nil
+}
+
+// waitNext waits out the interval before the next still, but wakes early
+// when a viewer asks for live frames.
+func (l *Loop) waitNext(ctx context.Context, d time.Duration) {
+	if _, wall := l.clock.(wallClock); !wall || l.Hub == nil {
+		l.clock.Sleep(ctx, d)
+		return
+	}
+	if d <= 0 {
+		return
+	}
+	t := time.NewTimer(d)
+	defer t.Stop()
+	select {
+	case <-t.C:
+	case <-ctx.Done():
+	case <-l.Hub.LiveWake():
+	}
 }
