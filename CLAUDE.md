@@ -8,7 +8,8 @@ from: phases M0–M6 (M5 native USB driver and M6 meteors are not built).
 - `cmd/skycam` — the Pi binary (`run`, `process -night`)
 - `cmd/skycam-web` — the relay on the Linode (skycam.mchugh.au, port 8996)
 - `internal/camera` — `Camera` interface; `asisdk` (purego over
-  libASICamera2.so, linux arm64/amd64 only), `fake` (replays JPEGs)
+  libASICamera2.so on 64-bit Linux, ASICamera2.dll on 64-bit Windows; C long
+  differs, see `long_*.go`), `fake` (replays JPEGs)
 - `internal/capture` — the loop: day/night, auto-exposure, analysis, overlay,
   save, live mode; `Hub` fans frames out to the web UI and uploader
 - `internal/exposure`, `internal/astro`, `internal/analysis` — pure, table-tested

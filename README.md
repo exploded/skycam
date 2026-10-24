@@ -59,6 +59,19 @@ known to be open.
 To rebuild one night's products, run
 `skycam -config config.json process -night 20261023`.
 
+## Bench test with the camera on Windows
+
+The SDK driver also runs on 64-bit Windows, so you can test the real camera
+on a PC.
+
+1. Install ZWO's camera driver for Windows from
+   https://www.zwoastro.com/software/. The SDK can't see the camera without it.
+2. Plug the camera in.
+3. In your config, set `"camera": {"driver": "sdk", "sdk_path": "<path to the
+   SDK's lib\x64\ASICamera2.dll>"}`, and point `listen` at a spare port.
+4. Run `go run ./cmd/skycam -config config.json run`, then open the page and
+   **Watch live**.
+
 ## Configuration
 
 `skycam` reads `/etc/skycam/config.json` on the Pi. Every key has a default,

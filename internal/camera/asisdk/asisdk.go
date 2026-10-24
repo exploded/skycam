@@ -1,12 +1,14 @@
-//go:build linux && (arm64 || amd64)
+//go:build (linux && (arm64 || amd64)) || (windows && amd64)
 
 // Package asisdk drives a ZWO ASI camera through ZWO's closed-source
 // libASICamera2.so, loaded at run time with purego, so skycam still builds
-// with CGO_ENABLED=0 and cross-compiles from Windows.
+// with CGO_ENABLED=0 and cross-compiles from Windows. It also runs on
+// 64-bit Windows against ASICamera2.dll, for bench tests with the camera
+// on a PC.
 //
-// The structs mirror ASICamera2.h (SDK 1.41) for LP64 targets, where C
-// long is 8 bytes. A 32-bit userland (armv7) would need int32 there, which
-// is why this file is limited to arm64 and amd64.
+// The structs mirror ASICamera2.h (SDK 1.41). C long is 8 bytes on 64-bit
+// Linux and 4 on 64-bit Windows, so it is spelt clong (long_*.go). A 32-bit
+// userland (armv7) is not supported.
 package asisdk
 
 import (
@@ -80,8 +82,8 @@ func check(call string, code int32) error {
 type cameraInfo struct {
 	Name                 [64]byte
 	CameraID             int32
-	MaxHeight            int64
-	MaxWidth             int64
+	MaxHeight            clong
+	MaxWidth             clong
 	IsColorCam           int32
 	BayerPattern         int32
 	SupportedBins        [16]int32
@@ -102,9 +104,9 @@ type cameraInfo struct {
 type controlCaps struct {
 	Name            [64]byte
 	Description     [128]byte
-	MaxValue        int64
-	MinValue        int64
-	DefaultValue    int64
+	MaxValue        clong
+	MinValue        clong
+	DefaultValue    clong
 	IsAutoSupported int32
 	IsWritable      int32
 	ControlType     int32
@@ -121,15 +123,15 @@ var (
 	asiGetNumOfControls         func(id int32, n unsafe.Pointer) int32
 	asiGetControlCaps           func(id int32, index int32, caps unsafe.Pointer) int32
 	asiGetControlValue          func(id int32, ctl int32, value unsafe.Pointer, auto unsafe.Pointer) int32
-	asiSetControlValue          func(id int32, ctl int32, value int64, auto int32) int32
+	asiSetControlValue          func(id int32, ctl int32, value clong, auto int32) int32
 	asiSetROIFormat             func(id int32, w, h, bin, imgType int32) int32
 	asiStartExposure            func(id int32, dark int32) int32
 	asiStopExposure             func(id int32) int32
 	asiGetExpStatus             func(id int32, status unsafe.Pointer) int32
-	asiGetDataAfterExp          func(id int32, buf unsafe.Pointer, size int64) int32
+	asiGetDataAfterExp          func(id int32, buf unsafe.Pointer, size clong) int32
 	asiStartVideoCapture        func(id int32) int32
 	asiStopVideoCapture         func(id int32) int32
-	asiGetVideoData             func(id int32, buf unsafe.Pointer, size int64, waitMs int32) int32
+	asiGetVideoData             func(id int32, buf unsafe.Pointer, size clong, waitMs int32) int32
 )
 
 var loadOnce sync.Once
@@ -137,7 +139,7 @@ var loadErr error
 
 func load(path string) error {
 	loadOnce.Do(func() {
-		lib, err := purego.Dlopen(path, purego.RTLD_NOW|purego.RTLD_GLOBAL)
+		lib, err := openLibrary(path)
 		if err != nil {
 			loadErr = fmt.Errorf("loading %s: %w", path, err)
 			return
@@ -240,11 +242,11 @@ func Open(sdkPath string, opts Options) (camera.Camera, error) {
 
 	for _, s := range []struct {
 		ctl int32
-		v   int64
+		v   clong
 	}{
-		{ctlBandwidth, int64(opts.Bandwidth)},
-		{ctlOffset, int64(opts.Offset)},
-		{ctlFlip, int64(opts.Flip)},
+		{ctlBandwidth, clong(opts.Bandwidth)},
+		{ctlOffset, clong(opts.Offset)},
+		{ctlFlip, clong(opts.Flip)},
 		{ctlHighSpeed, 0},
 	} {
 		// Not every camera has every control; a refusal here is not fatal.
@@ -278,14 +280,14 @@ func (c *Camera) Info() camera.Info { return c.info }
 
 func (c *Camera) apply(s camera.Settings) error {
 	us := s.Exposure.Microseconds()
-	if err := check("set exposure", asiSetControlValue(c.id, ctlExposure, us, 0)); err != nil {
+	if err := check("set exposure", asiSetControlValue(c.id, ctlExposure, clong(us), 0)); err != nil {
 		return err
 	}
-	return check("set gain", asiSetControlValue(c.id, ctlGain, int64(s.Gain), 0))
+	return check("set gain", asiSetControlValue(c.id, ctlGain, clong(s.Gain), 0))
 }
 
 func (c *Camera) temp() float64 {
-	var v int64
+	var v clong
 	var auto int32
 	if asiGetControlValue(c.id, ctlTemperature, unsafe.Pointer(&v), unsafe.Pointer(&auto)) != 0 {
 		return camera.NoTemp
@@ -342,7 +344,7 @@ func (c *Camera) snap(ctx context.Context, exp time.Duration) error {
 		}
 		switch st {
 		case expSuccess:
-			return check("ASIGetDataAfterExp", asiGetDataAfterExp(c.id, unsafe.Pointer(&c.buf[0]), int64(len(c.buf))))
+			return check("ASIGetDataAfterExp", asiGetDataAfterExp(c.id, unsafe.Pointer(&c.buf[0]), clong(len(c.buf))))
 		case expFailed:
 			return fmt.Errorf("asisdk: exposure failed")
 		case expIdle:
@@ -367,7 +369,7 @@ func (c *Camera) oneVideoFrame(exp time.Duration) error {
 	if err := check("ASIStartVideoCapture", asiStartVideoCapture(c.id)); err != nil {
 		return err
 	}
-	err := check("ASIGetVideoData", asiGetVideoData(c.id, unsafe.Pointer(&c.buf[0]), int64(len(c.buf)), waitMs(exp)))
+	err := check("ASIGetVideoData", asiGetVideoData(c.id, unsafe.Pointer(&c.buf[0]), clong(len(c.buf)), waitMs(exp)))
 	asiStopVideoCapture(c.id)
 	return err
 }
@@ -413,7 +415,7 @@ func (c *Camera) VideoFrame(ctx context.Context) (camera.Frame, error) {
 	}
 	s := c.settings
 	start := time.Now()
-	if err := check("ASIGetVideoData", asiGetVideoData(c.id, unsafe.Pointer(&c.buf[0]), int64(len(c.buf)), waitMs(s.Exposure))); err != nil {
+	if err := check("ASIGetVideoData", asiGetVideoData(c.id, unsafe.Pointer(&c.buf[0]), clong(len(c.buf)), waitMs(s.Exposure))); err != nil {
 		return camera.Frame{}, err
 	}
 	return c.frame(start, s), nil
