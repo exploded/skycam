@@ -90,6 +90,7 @@ func (s *Server) Handler() (http.Handler, error) {
 
 	images := http.HandlerFunc(s.images)
 	mux.Handle("GET /images/", s.basicAuth(images))
+	mux.Handle("GET /api/nights/{night}/sky", s.basicAuth(http.HandlerFunc(s.skyNight)))
 	mux.Handle("GET /images", http.RedirectHandler("/images/", http.StatusMovedPermanently))
 	return s.logRequests(mux), nil
 }

@@ -363,3 +363,27 @@ func Sky(cover float64) string {
 		return "cloudy"
 	}
 }
+
+// The cloud-onset rule other tools rely on (skyq reads it from the sky
+// API): the first of OnsetRun consecutive estimates at OnsetCloud or more.
+const (
+	OnsetCloud = 0.5
+	OnsetRun   = 3
+)
+
+// CloudOnset returns the index of the frame where cloud set in, or -1 if
+// it never did. An unknown estimate (NaN: roof shut, twilight) breaks a
+// run rather than extending it, because unknown is not cloudy either.
+func CloudOnset(cover []float64) int {
+	run := 0
+	for i, c := range cover {
+		if math.IsNaN(c) || c < OnsetCloud {
+			run = 0
+			continue
+		}
+		if run++; run == OnsetRun {
+			return i - OnsetRun + 1
+		}
+	}
+	return -1
+}

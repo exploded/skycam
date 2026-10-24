@@ -143,6 +143,14 @@ type Relay struct {
 	LiveWidth int      `json:"live_width"` // live frames are scaled to this width
 }
 
+// Alpaca serves the camera as an ASCOM Alpaca ObservingConditions device,
+// so N.I.N.A. can read cloud cover from the Pi. Advisory only.
+type Alpaca struct {
+	Listen    string   `json:"listen"`    // ":11111"; empty turns the device off
+	Discovery bool     `json:"discovery"` // answer Alpaca discovery on UDP 32227
+	MaxAge    Duration `json:"max_age"`   // older frames read as unavailable
+}
+
 type Live struct {
 	// NightLimit caps a live session at night, because live mode pauses
 	// still capture and leaves a gap in the timelapse.
@@ -178,6 +186,7 @@ type Config struct {
 	Live        Live        `json:"live"`
 	S3          S3          `json:"s3"`
 	Relay       Relay       `json:"relay"`
+	Alpaca      Alpaca      `json:"alpaca"`
 
 	MonitorURL    string `json:"monitor_url"`
 	MonitorAPIKey string `json:"monitor_api_key"`
@@ -262,6 +271,7 @@ func Default() Config {
 			LiveFPS:   2,
 			LiveWidth: 960,
 		},
+		Alpaca: Alpaca{Listen: ":11111", Discovery: true, MaxAge: Duration(5 * time.Minute)},
 	}
 }
 

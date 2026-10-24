@@ -12,9 +12,11 @@ import (
 	"flag"
 	"fmt"
 	"log/slog"
+	"net"
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"sync"
 	"syscall"
 	"time"
@@ -25,6 +27,7 @@ import (
 
 	"github.com/exploded/monitor/pkg/logship"
 
+	"github.com/exploded/skycam/internal/alpaca"
 	"github.com/exploded/skycam/internal/astro"
 	"github.com/exploded/skycam/internal/camera"
 	"github.com/exploded/skycam/internal/camera/asisdk"
@@ -222,6 +225,7 @@ func (a *app) run(ctx context.Context) error {
 	errc := make(chan error, 2)
 	go func() { errc <- web.Serve(ctx, a.cfg.Listen, h, a.log) }()
 	go a.up.Run(ctx, a.hub)
+	a.startAlpaca(ctx)
 
 	// Products for any night the Pi missed at dawn.
 	active := ""
@@ -263,6 +267,31 @@ func (a *app) run(ctx context.Context) error {
 	}
 	a.wait()
 	return err
+}
+
+// startAlpaca serves the ObservingConditions device. It is advisory, so a
+// port it can't bind is a warning, never a reason to stop capturing.
+func (a *app) startAlpaca(ctx context.Context) {
+	c := a.cfg.Alpaca
+	if c.Listen == "" {
+		return
+	}
+	dev := &alpaca.Server{Src: a.hub, MaxAge: c.MaxAge.D(), BlackLevel: a.cfg.Analysis.BlackLevel}
+	go func() {
+		if err := web.Serve(ctx, c.Listen, dev.Handler(), a.log); err != nil {
+			a.log.Warn("alpaca device stopped", "addr", c.Listen, "err", err)
+		}
+	}()
+	if !c.Discovery {
+		return
+	}
+	_, p, err := net.SplitHostPort(c.Listen)
+	port, perr := strconv.Atoi(p)
+	if err != nil || perr != nil {
+		a.log.Warn("alpaca discovery off: listen has no port", "addr", c.Listen)
+		return
+	}
+	go alpaca.StartDiscovery(ctx, port)
 }
 
 // writeReport renders a night's report into its products folder.

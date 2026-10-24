@@ -5,7 +5,7 @@
   "listen": ":80",
   "data_dir": "/var/lib/skycam",
 
-  "images_user": "skyq",
+  "images_user": "admin",
   "images_password": "CHANGE-ME (the password skyq's config.json uses for allsky)",
 
   "jpeg_quality": 90,
@@ -72,6 +72,11 @@
     "every": "30s",
     "live_fps": 2,
     "live_width": 960
+  },
+  "alpaca": {
+    "listen": ":11111",
+    "discovery": true,
+    "max_age": "5m"
   },
 
   "monitor_url": "https://monitor.mchugh.au",

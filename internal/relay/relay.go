@@ -159,8 +159,12 @@ func (s *Server) healthPi(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	seen := s.seen
 	s.mu.Unlock()
+	if seen.IsZero() {
+		http.Error(w, "pi not heard from since the relay started", http.StatusServiceUnavailable)
+		return
+	}
 	age := time.Since(seen)
-	if seen.IsZero() || age > piStaleSecs*time.Second {
+	if age > piStaleSecs*time.Second {
 		http.Error(w, fmt.Sprintf("pi silent for %s", age.Round(time.Second)), http.StatusServiceUnavailable)
 		return
 	}

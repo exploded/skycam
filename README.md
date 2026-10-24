@@ -133,6 +133,46 @@ which deepspaceplace serves at https://www.deepspaceplace.com/reports/skycam/.
 Live mode pauses still capture. At night, a session is capped at 10 minutes
 and then blocked for 30, so the timelapse keeps its frames.
 
+## What runs where
+
+Each machine owns the data it produces:
+
+| Machine | Program | Owns |
+|---|---|---|
+| Pi | skycam | The sky: capture, cloud, live view, sky report, and the Alpaca weather device. Runs 24x7. |
+| NUC | skyq | Imaging: what got through, the transparency index, failure attribution, autofocus and guiding, from the N.I.N.A. and PHD2 logs. |
+| Linode | skycam-web | Publishing and remote access |
+
+The NUC reads the sky from the Pi; the Pi never needs the NUC.
+
+## N.I.N.A. weather device
+
+skycam serves an ASCOM Alpaca ObservingConditions device on port 11111 and
+answers Alpaca discovery, so it appears in N.I.N.A.'s weather device list.
+It is advisory only, never a safety monitor.
+
+| Property | Value |
+|---|---|
+| `CloudCover` | 0-100, from the star count against the clear-sky baseline |
+| `SkyBrightness` | Sky level in ADU per second at unity gain; instrumental, not lux |
+| `TimeSinceLastUpdate` | Seconds since the newest frame |
+
+Both values read as unavailable (Alpaca error 1026), never as zero, when:
+- The newest frame is more than 5 minutes old.
+- The roof isn't known to be open.
+- For `CloudCover`, it's twilight or there's no clear-sky baseline yet.
+
+Everything else is not implemented. Set `alpaca.listen` to `""` to turn the
+device off.
+
+## Sky API
+
+`GET /api/nights/<YYYYMMDD>/sky` returns one night's frames as JSON: time,
+image path, exposure, stars, cloud, sky level, roof and rain. It also
+returns the cloud onset: the first of 3 consecutive frames with cloud of 0.5
+or more. It uses the same basic auth as `/images/`. skyq reads it to
+attribute imaging failures to cloud.
+
 ## Tests
 
 Run `go test ./...`.

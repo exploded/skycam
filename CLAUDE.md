@@ -19,7 +19,8 @@ from: phases M0–M6 (M5 native USB driver and M6 meteors are not built).
   retention, catch-up
 - `internal/report` — self-contained HTML report; `svg.go` and `report.css`
   are copied from skyq and must stay in step with skyq's `design/CHARTS.md`
-- `internal/web` — the Pi UI; `internal/relay` — the relay
+- `internal/web` — the Pi UI and sky API; `internal/relay` — the relay
+- `internal/alpaca` — ObservingConditions device and discovery responder
 - `internal/store` — SQLite (modernc + sqlc); `schema.sql` is the source of
   truth; run `sqlc generate` after editing it or `queries.sql`
 - `third_party/zwo` — ZWO SDK 1.41 arm64 `.so` (MIT), udev rule
@@ -29,6 +30,12 @@ from: phases M0–M6 (M5 native USB driver and M6 meteors are not built).
 - **skyq reads `/images/<YYYYMMDD>/image-<YYYYMMDDHHMMSS>.jpg` with basic
   auth**, exactly as it read allsky. The night date is allsky's (frames before
   noon belong to the previous evening). `web_test.go` pins this.
+- **skyq reads `/api/nights/<YYYYMMDD>/sky`** (same basic auth) for a night's
+  cloud series, roof state and onset, in place of measuring stills itself.
+  The onset rule is `analysis.CloudOnset`. `sky_test.go` pins the shape.
+- **N.I.N.A. reads the Alpaca ObservingConditions device** on port 11111
+  (`internal/alpaca`, ported from skyq). Unknown answers `ValueNotSet`
+  (1026), never 0; `SkyQuality` is not implemented.
 - **The overlay's top-left block keeps allsky's layout.** skyq measures cloud
   in a band from 6% to 30% of the frame height that includes it. New text goes
   bottom-left only.
