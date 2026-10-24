@@ -37,7 +37,8 @@ from: phases M0–M6 (M5 native USB driver and M6 meteors are not built).
   The onset rule is `analysis.CloudOnset`. `sky_test.go` pins the shape.
 - **N.I.N.A. reads the Alpaca ObservingConditions device** on port 11111
   (`internal/alpaca`, ported from skyq). Unknown answers `ValueNotSet`
-  (1026), never 0; `SkyQuality` is not implemented.
+  (1026), never 0. `SkyQuality` is sky_mag plus `analysis.sqm_offset`, an
+  approximate mag/arcsec² — not skyq's old transparency index.
 - **The overlay's top-left block keeps allsky's layout.** skyq measures cloud
   in a band from 6% to 30% of the frame height that includes it. New text goes
   bottom-left only.
@@ -58,6 +59,10 @@ from: phases M0–M6 (M5 native USB driver and M6 meteors are not built).
   unreliable on USB 2 cameras; `asisdk` does the same unless `camera.snap`.
 - MJPEG handlers must flush headers before the first frame, or a client with
   no frame yet waits forever.
+- Video frames lag their settings by a few frames, so live auto-exposure
+  (`liveExposure`) waits for each change to reach the image before
+  metering again. Metering stale frames made live view swing between too
+  bright and too dark.
 - `Loop.NightEnded` runs on the capture goroutine and must return at once.
 
 ## Workflow

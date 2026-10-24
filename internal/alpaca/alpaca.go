@@ -59,6 +59,7 @@ type Server struct {
 	Src        Source
 	MaxAge     time.Duration // a frame older than this is unavailable
 	BlackLevel float64       // ADU subtracted before normalising brightness
+	SQMOffset  float64       // added to the sky magnitude for SkyQuality
 	Now        func() time.Time
 	// Weather is optional; nil leaves the ambient sensors not implemented.
 	Weather WeatherSource
@@ -177,7 +178,7 @@ func (s *Server) device(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			s.reply(w, r, s.now().Sub(cur.At).Seconds(), 0, "")
-		case sensor == "", sensor == "cloudcover", sensor == "skybrightness":
+		case sensor == "", sensor == "cloudcover", sensor == "skybrightness", sensor == "skyquality":
 			rec := s.Src.Latest()
 			if rec == nil {
 				s.reply(w, r, nil, errValueNotSet, "no frames yet")
@@ -190,13 +191,26 @@ func (s *Server) device(w http.ResponseWriter, r *http.Request) {
 	case "sensordescription":
 		s.reply(w, r, s.sensorDescription(param(r, "SensorName")), 0, "")
 
+	case "skyquality":
+		rec, why := s.frame()
+		switch {
+		case rec == nil:
+			s.reply(w, r, nil, errValueNotSet, "sky quality unavailable: "+why)
+		case !rec.Obs.RoofOpen():
+			s.reply(w, r, nil, errValueNotSet, "sky quality unavailable: roof "+strings.ToLower(rec.Obs.Roof))
+		case rec.Mode != "night":
+			s.reply(w, r, nil, errValueNotSet, "sky quality unavailable: daylight")
+		case math.IsNaN(rec.SkyMag) || math.IsInf(rec.SkyMag, 0):
+			s.reply(w, r, nil, errValueNotSet, "sky quality unavailable: sky level not measured")
+		default:
+			s.reply(w, r, rec.SkyMag+s.SQMOffset, 0, "")
+		}
+
 	case "temperature", "humidity", "pressure", "dewpoint",
 		"windspeed", "winddirection", "windgust", "rainrate":
 		s.ambient(w, r, prop)
 
-	// skyq filled SkyQuality with its transparency index from N.I.N.A.'s own
-	// frames; the camera has nothing honest to put there.
-	case "skyquality", "starfwhm", "skytemperature":
+	case "starfwhm", "skytemperature":
 		s.reply(w, r, nil, errNotImplemented, "sensor not implemented: "+prop)
 
 	default:
@@ -276,6 +290,8 @@ func (s *Server) sensorDescription(sensor string) string {
 		return "Cloud cover from the all-sky camera's star count against its clear-sky baseline; only with the roof open and the sun below -12 degrees. Advisory."
 	case sensor == "skybrightness":
 		return "All-sky camera sky level in ADU per second at unity gain. Instrumental units, not lux."
+	case sensor == "skyquality":
+		return "Approximate sky brightness in mag/arcsec^2 from the all-sky camera, calibrated by one offset (analysis.sqm_offset); not a metered SQM. Higher is darker."
 	case ambientSensors[sensor] && s.Weather != nil:
 		return "OpenWeatherMap current conditions for the site coordinates (dew point derived with the Magnus formula)."
 	default:

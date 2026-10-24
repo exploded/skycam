@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"image"
 	"image/jpeg"
+	"math"
 	"time"
 
 	"github.com/exploded/skycam/internal/camera"
@@ -57,6 +58,7 @@ func (l *Loop) runLive(ctx context.Context) error {
 	}
 	gap := time.Duration(float64(time.Second) / fps)
 	var lastPub time.Time
+	ae := liveExposure{s: s}
 	for {
 		if ctx.Err() != nil {
 			return nil
@@ -76,11 +78,10 @@ func (l *Loop) runLive(ctx context.Context) error {
 		}
 		w, h := f.Image.Bounds().Dx(), f.Image.Bounds().Dy()
 		mean, sat := exposure.Meter(f.Image, l.Cfg.Exposure.Meter.Pixels(w, h), pixelRects(l, w, h))
-		if next := exposure.Next(s, mean, sat, lim); next != s {
+		if next, changed := ae.frame(mean, sat, lim); changed {
 			if err := l.Cam.SetVideo(next); err != nil {
 				return err
 			}
-			s = next
 		}
 		if now.Sub(lastPub) < gap {
 			continue
@@ -88,6 +89,48 @@ func (l *Loop) runLive(ctx context.Context) error {
 		lastPub = now
 		l.Hub.PublishLive(l.liveJPEG(f))
 	}
+}
+
+// liveSettleMax caps how many video frames liveExposure waits for a new
+// setting to show, in case the scene changed at the same moment.
+const liveSettleMax = 10
+
+// liveExposure is auto-exposure for video mode. The SDK hands back frames
+// already in flight, so for a few frames after a change the image still
+// shows the old setting. Metering those and stepping again overshoots, and
+// live view swings between too bright and too dark. So after each change
+// it waits until the brightness has moved at least halfway (on a log
+// scale) toward what the new setting should give, however many frames
+// that takes.
+type liveExposure struct {
+	s       camera.Settings
+	waiting int     // frames waited since the last change; 0 when settled
+	from    float64 // mean when the setting changed
+	want    float64 // expected log change in the mean
+}
+
+func totalLight(s camera.Settings) float64 {
+	return s.Exposure.Seconds() * exposure.GainFactor(s.Gain)
+}
+
+// frame takes one video frame's measurement and returns the settings to
+// use, and whether they changed.
+func (e *liveExposure) frame(mean, saturated float64, lim exposure.Limits) (camera.Settings, bool) {
+	if e.waiting > 0 {
+		moved := math.Log(max(mean, 0.5) / max(e.from, 0.5))
+		if moved*e.want < 0.25*e.want*e.want && e.waiting < liveSettleMax {
+			e.waiting++
+			return e.s, false
+		}
+		e.waiting = 0
+	}
+	next := exposure.Next(e.s, mean, saturated, lim)
+	if next == e.s {
+		return e.s, false
+	}
+	e.from, e.want = mean, math.Log(totalLight(next)/totalLight(e.s))
+	e.s, e.waiting = next, 1
+	return next, true
 }
 
 func (l *Loop) liveStart(now time.Time) time.Time {

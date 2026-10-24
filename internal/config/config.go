@@ -112,7 +112,13 @@ type Analysis struct {
 	// not calibrated against an SQM; the number is for trends only.
 	SkyZeroPoint float64 `json:"sky_zero_point"`
 	BlackLevel   float64 `json:"black_level"` // ADU subtracted before normalising
-	Sky          Rect    `json:"sky"`         // region used for stars and sky brightness
+	// SQMOffset is added to the sky magnitude to approximate an SQM reading
+	// in mag/arcsec², which the Alpaca device reports as SkyQuality. 0.6
+	// puts a clear, moonless 2026-09-02 at 19.2, the published estimate for
+	// Donvale; set it from a real SQM reading taken under a clear, moonless
+	// sky with the roof open.
+	SQMOffset float64 `json:"sqm_offset"`
+	Sky       Rect    `json:"sky"` // region used for stars and sky brightness
 }
 
 type Timelapse struct {
@@ -259,6 +265,7 @@ func Default() Config {
 			BandBottom:   0.30,
 			StarSigma:    5,
 			SkyZeroPoint: 20,
+			SQMOffset:    0.6,
 			Sky:          Rect{0, 0.15, 1, 0.85},
 		},
 		Timelapse: Timelapse{Enabled: true, FPS: 25, Codec: "libx264", CRF: 23, FFmpeg: "ffmpeg"},

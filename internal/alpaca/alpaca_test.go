@@ -24,14 +24,14 @@ var now = time.Date(2026, 10, 24, 23, 0, 0, 0, time.UTC)
 func darkOpen(cloud float64) *capture.Record {
 	return &capture.Record{
 		Time: now.Add(-30 * time.Second), Mode: "night", SunAlt: -30,
-		Exposure: 5 * time.Second, Gain: 0, SkyLevel: 30, Cloud: cloud,
+		Exposure: 5 * time.Second, Gain: 0, SkyLevel: 30, SkyMag: 18.6, Cloud: cloud,
 		Obs: observatory.Snapshot{Roof: "OPEN", Rain: "SAFE"},
 	}
 }
 
 func newTestServer(t *testing.T, rec *capture.Record) *httptest.Server {
 	t.Helper()
-	s := &Server{Src: stubSource{rec}, MaxAge: 5 * time.Minute, Now: func() time.Time { return now }}
+	s := &Server{Src: stubSource{rec}, MaxAge: 5 * time.Minute, SQMOffset: 0.6, Now: func() time.Time { return now }}
 	srv := httptest.NewServer(s.Handler())
 	t.Cleanup(srv.Close)
 	return srv
@@ -159,7 +159,7 @@ func TestTimeSinceLastUpdate(t *testing.T) {
 
 func TestNotImplementedSensors(t *testing.T) {
 	srv := newTestServer(t, darkOpen(0.1))
-	for _, p := range []string{"skyquality", "temperature", "humidity", "windspeed", "rainrate"} {
+	for _, p := range []string{"starfwhm", "temperature", "humidity", "windspeed", "rainrate"} {
 		if e := get(t, srv.URL+dev+p); e.ErrorNumber != errNotImplemented {
 			t.Errorf("%s: ErrorNumber=%d, want %d", p, e.ErrorNumber, errNotImplemented)
 		}
@@ -234,5 +234,23 @@ func TestNoSafetyMonitorAnywhere(t *testing.T) {
 	}
 	if !strings.Contains(deviceDesc, "never a safety monitor") {
 		t.Error("device description should state the advisory-only stance")
+	}
+}
+
+func TestSkyQuality(t *testing.T) {
+	env := get(t, newTestServer(t, darkOpen(0.1)).URL+dev+"skyquality")
+	if v, ok := env.Value.(float64); env.ErrorNumber != 0 || !ok || math.Abs(v-19.2) > 1e-9 {
+		t.Errorf("clear and dark: %+v, want 18.6 + 0.6 = 19.2", env)
+	}
+	shut := darkOpen(math.NaN())
+	shut.Obs.Roof = "CLOSED"
+	day := darkOpen(math.NaN())
+	day.Mode = "day"
+	unmeasured := darkOpen(0.1)
+	unmeasured.SkyMag = math.NaN()
+	for name, rec := range map[string]*capture.Record{"no frames": nil, "roof shut": shut, "day": day, "unmeasured": unmeasured} {
+		if env := get(t, newTestServer(t, rec).URL+dev+"skyquality"); env.ErrorNumber != errValueNotSet || env.Value != nil {
+			t.Errorf("%s: %+v, want ValueNotSet", name, env)
+		}
 	}
 }

@@ -277,7 +277,7 @@ func (a *app) startAlpaca(ctx context.Context) {
 	if c.Listen == "" {
 		return
 	}
-	dev := &alpaca.Server{Src: a.hub, MaxAge: c.MaxAge.D(), BlackLevel: a.cfg.Analysis.BlackLevel}
+	dev := &alpaca.Server{Src: a.hub, MaxAge: c.MaxAge.D(), BlackLevel: a.cfg.Analysis.BlackLevel, SQMOffset: a.cfg.Analysis.SQMOffset}
 	if wc := a.cfg.Weather; wc.APIKey != "" {
 		weather := owm.New(owm.Options{APIKey: wc.APIKey, Lat: a.cfg.Latitude, Lon: a.cfg.Longitude,
 			Interval: wc.Interval.D(), MaxAge: wc.MaxAge.D()})

@@ -155,6 +155,7 @@ It is advisory only, never a safety monitor.
 |---|---|
 | `CloudCover` | 0-100, from the star count against the clear-sky baseline |
 | `SkyBrightness` | Sky level in ADU per second at unity gain; instrumental, not lux |
+| `SkyQuality` | Approximate sky brightness in mag/arcsec², the unit an SQM meter reports; higher is darker |
 | `TimeSinceLastUpdate` | Seconds since the newest frame, or since the weather reading for an ambient sensor |
 | `Temperature`, `Humidity`, `Pressure`, `DewPoint`, `WindSpeed`, `WindDirection`, `WindGust`, `RainRate` | OpenWeatherMap's current conditions for the site, when `openweathermap.api_key` is set |
 
@@ -163,6 +164,14 @@ when:
 - The newest frame is more than 5 minutes old.
 - The roof isn't known to be open.
 - For `CloudCover`, it's twilight or there's no clear-sky baseline yet.
+- For `SkyQuality`, the camera is in day mode.
+
+`SkyQuality` is skycam's sky magnitude plus one calibration offset,
+`analysis.sqm_offset`. The default, 0.6, makes a clear, moonless sky read
+about 19.2, the published estimate for Donvale. To calibrate it properly,
+take an SQM reading (a meter or a phone app) under a clear, moonless sky
+with the roof open. Then change the offset by the difference between that
+reading and skycam's.
 
 The ambient values come from the OpenWeatherMap Current Weather API. skycam
 fetches them every 10 minutes, which is as often as OpenWeatherMap updates,
@@ -170,8 +179,7 @@ and serves the cached reading in between. A reading older than 30 minutes
 reads as unavailable. OpenWeatherMap's cloud cover is never used. Without an
 API key, the ambient sensors are not implemented, and N.I.N.A. greys them out.
 
-`SkyQuality` is not implemented. Set `alpaca.listen` to `""` to turn the
-device off.
+Set `alpaca.listen` to `""` to turn the device off.
 
 ## Sky API
 

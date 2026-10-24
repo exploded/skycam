@@ -47,6 +47,7 @@
     "clear_stars": 0,
     "sky_zero_point": 20,
     "black_level": 0,
+    "sqm_offset": 0.6,
     "sky": { "x0": 0, "y0": 0.15, "x1": 1, "y1": 0.85 }
   },
 
