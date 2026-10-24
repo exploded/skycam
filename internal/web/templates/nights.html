@@ -1,0 +1,13 @@
+{{define "content"}}<div class="panel">
+  <h2>Nights</h2>
+  <table>
+    <thead><tr><th>Night</th><th>Frames</th><th>Products</th></tr></thead>
+    <tbody>
+    {{range .Nights}}<tr>
+      <td>{{.Date}}</td>
+      <td>{{if .Frames}}{{.Frames}}{{else}}<span class="muted">—</span>{{end}}</td>
+      <td>{{if .Report}}<a href="{{.Report}}">Report</a>{{end}}{{if .Timelapse}}<a href="{{.Timelapse}}">Timelapse</a>{{end}}{{if .Keogram}}<a href="{{.Keogram}}">Keogram</a>{{end}}{{if .Startrails}}<a href="{{.Startrails}}">Star trails</a>{{end}}{{if .Images}}<a href="/images/{{.Night}}/">Frames</a>{{end}}</td>
+    </tr>{{else}}<tr><td colspan="3" class="muted">No nights yet.</td></tr>{{end}}
+    </tbody>
+  </table>
+</div>{{end}}

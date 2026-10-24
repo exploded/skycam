@@ -1,0 +1,18 @@
+{{define "_latest"}}<div id="latest" class="grid" hx-get="/partials/latest" hx-trigger="every 15s" hx-swap="outerMorph">
+  <div class="frame">{{if .Has}}<img src="/image.jpg?t={{.Stamp}}" alt="Latest frame">{{end}}</div>
+  <div class="stack">
+    <div class="panel">
+      <h2>Observatory</h2>
+      {{if .Has}}<dl>
+        <dt>Roof</dt><dd>{{with .St.Roof}}<span class="badge {{if eq . "OPEN"}}ok{{else if or (eq . "CLOSED") (eq . "unknown")}}muted{{else}}warn{{end}}">{{.}}</span>{{end}}</dd>
+        <dt>Rain</dt><dd>{{with .St.Rain}}<span class="badge {{if eq . "SAFE"}}ok{{else if eq . "RAIN"}}bad{{else}}muted{{end}}">{{.}}</span>{{end}}</dd>
+        <dt>Sky</dt><dd>{{.St.Sky}} · {{.St.Stars}} stars</dd>
+        {{if .St.NINA}}<dt>N.I.N.A.</dt><dd>{{.St.NINA}}</dd>{{end}}
+        <dt>Frame</dt><dd>{{.St.Time.Format "15:04:05"}} <span class="{{if .Stale}}bad{{else}}muted{{end}}">({{.Age}} ago)</span></dd>
+        <dt>Exposure</dt><dd>{{printf "%.2f" .St.ExposureS}} s · gain {{.St.Gain}} · {{.St.Mode}}</dd>
+      </dl>{{else}}<p class="note">Nothing from the observatory yet.</p>{{end}}
+      {{if .PiSeen}}<p class="note">Pi last heard from {{.PiSeen}} ago.</p>{{end}}
+    </div>
+    <a class="btn" href="/live">Watch live</a>
+  </div>
+</div>{{end}}

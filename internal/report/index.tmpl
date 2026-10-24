@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>All-sky night reports</title>
+<style>
+{{.CSS}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>All&#8209;sky night reports</h1>
+<p class="sub">One page per night from the observatory's all&#8209;sky camera: cloud, sky brightness, timelapse,
+keogram and star trails.</p>
+<div class="card nights">
+{{range .Rows}}  <a class="night" href="{{.Href}}"><time>{{.Date}}</time><span class="sum">{{.Summary}}</span></a>
+{{else}}  <p class="note">No nights yet.</p>
+{{end}}</div>
+</div>
+</body>
+</html>

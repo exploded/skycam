@@ -1,0 +1,66 @@
+{{define "base"}}<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{.Title}} · skycam</title>
+<meta name="htmx-config" content='{"noSwap": [204, 304, "5xx"]}'>
+<script src="/static/htmx.min.js" defer></script>
+<style>
+:root {
+  --bg: #f6f6f4; --surface: #ffffff; --border: rgba(11,11,11,.1);
+  --text: #0b0b0b; --muted: #52514e; --accent: #2a78d6;
+  --ok: #1a7f4b; --warn: #b26a00; --bad: #c62828;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0d0d0f; --surface: #17171a; --border: rgba(255,255,255,.1);
+    --text: #ececec; --muted: #a3a3a8; --accent: #5b9cf0;
+    --ok: #45c07f; --warn: #e3a33a; --bad: #ef6b6b;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0d0d0f; --surface: #17171a; --border: rgba(255,255,255,.1);
+  --text: #ececec; --muted: #a3a3a8; --accent: #5b9cf0;
+  --ok: #45c07f; --warn: #e3a33a; --bad: #ef6b6b;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+nav { display: flex; gap: 18px; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--border); background: var(--surface); flex-wrap: wrap; }
+nav .brand { font-weight: 600; margin-right: auto; }
+nav a { color: var(--muted); text-decoration: none; }
+nav a:hover, nav a[aria-current] { color: var(--text); }
+main { max-width: 1320px; margin: 0 auto; padding: 16px; }
+.grid { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 16px; align-items: start; }
+@media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+.frame { background: #000; border-radius: 8px; overflow: hidden; aspect-ratio: 4 / 3; }
+.frame img { width: 100%; height: 100%; object-fit: contain; display: block; }
+.panel { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; }
+.panel h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin: 0 0 8px; font-weight: 600; }
+dl { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; margin: 0; }
+dt { color: var(--muted); }
+dd { margin: 0; font-variant-numeric: tabular-nums; }
+.badge { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 13px; font-weight: 600; border: 1px solid currentColor; }
+.ok { color: var(--ok); } .warn { color: var(--warn); } .bad { color: var(--bad); } .muted { color: var(--muted); }
+.btn { display: inline-block; min-width: 120px; text-align: center; padding: 8px 14px; border-radius: 6px; background: var(--accent); color: #fff; text-decoration: none; font-weight: 600; }
+.stack > * + * { margin-top: 16px; }
+table { width: 100%; border-collapse: collapse; }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); }
+th { color: var(--muted); font-weight: 600; font-size: 13px; }
+td a { color: var(--accent); text-decoration: none; margin-right: 10px; }
+.note { color: var(--muted); font-size: 14px; }
+</style>
+</head>
+<body>
+<nav>
+  <span class="brand">Observatory</span>
+  <a href="/">Now</a>
+  <a href="/live">Live</a>
+  <a href="/nights">Nights</a>
+</nav>
+<main>
+{{block "content" .}}{{end}}
+</main>
+</body>
+</html>
+{{end}}

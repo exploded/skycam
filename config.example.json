@@ -1,0 +1,79 @@
+{
+  "timezone": "Australia/Melbourne",
+  "latitude": -37.0,
+  "longitude": 145.0,
+  "listen": ":80",
+  "data_dir": "/var/lib/skycam",
+
+  "images_user": "skyq",
+  "images_password": "CHANGE-ME (the password skyq's config.json uses for allsky)",
+
+  "jpeg_quality": 90,
+  "retention_nights": 14,
+  "product_days": 365,
+
+  "camera": {
+    "driver": "sdk",
+    "sdk_path": "/usr/local/lib/libASICamera2.so",
+    "label": "ZWO ASI120MM Mini",
+    "offset": 0,
+    "bandwidth": 40,
+    "flip": 0,
+    "snap": false
+  },
+
+  "exposure": {
+    "sun_angle": -6,
+    "day":   { "interval": "30s", "min_exposure": "32us", "max_exposure": "2s", "min_gain": 0,  "max_gain": 0,  "target": 100, "save": false },
+    "night": { "interval": "20s", "min_exposure": "1ms",  "max_exposure": "5s", "min_gain": 50, "max_gain": 50, "target": 70,  "save": true },
+    "meter":   { "x0": 0, "y0": 0.15, "x1": 1, "y1": 0.85 },
+    "exclude": [ { "x0": 0, "y0": 0, "x1": 0.3, "y1": 0.15 }, { "x0": 0, "y0": 0.88, "x1": 0.5, "y1": 1 } ]
+  },
+
+  "overlay": { "enabled": true, "observatory": true },
+
+  "observatory": {
+    "roof_url": "http://rolloff.local/status.json",
+    "rain_url": "http://rg11.local/status.json",
+    "nina_url": "http://nuc.local:1888",
+    "poll_interval": "10s",
+    "stale_after": "60s"
+  },
+
+  "analysis": {
+    "band_top": 0.06,
+    "band_bottom": 0.30,
+    "star_sigma": 5,
+    "clear_stars": 0,
+    "sky_zero_point": 20,
+    "black_level": 0,
+    "sky": { "x0": 0, "y0": 0.15, "x1": 1, "y1": 0.85 }
+  },
+
+  "timelapse": { "enabled": true, "fps": 25, "codec": "libx264", "crf": 23, "ffmpeg": "ffmpeg" },
+
+  "live": { "night_limit": "10m", "idle_stop": "60s", "max_exposure": "500ms" },
+
+  "s3": {
+    "enabled": false,
+    "bucket": "",
+    "region": "ap-southeast-2",
+    "prefix": "skycam/",
+    "access_key_id": "",
+    "secret_access_key": "",
+    "public_base_url": "",
+    "latest_every": "5m",
+    "all_frames": false
+  },
+
+  "relay": {
+    "url": "https://skycam.mchugh.au",
+    "token": "CHANGE-ME (same as SKYCAM_TOKEN in the relay's .env)",
+    "every": "30s",
+    "live_fps": 2,
+    "live_width": 960
+  },
+
+  "monitor_url": "https://monitor.mchugh.au",
+  "monitor_api_key": ""
+}

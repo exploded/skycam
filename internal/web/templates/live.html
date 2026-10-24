@@ -1,0 +1,9 @@
+{{define "content"}}<div class="grid">
+  <div class="frame"><img src="/live.mjpg" alt="Live view"></div>
+  <div class="panel">
+    <h2>Live view</h2>
+    <p class="note">Short exposures, about two frames a second, while this page is open. Still capture pauses
+    meanwhile; at night a session is capped at {{.NightLimit}} so the timelapse keeps its frames.</p>
+    <p><a class="btn" href="/">Back</a></p>
+  </div>
+</div>{{end}}

@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{.Title}}</title>
+<style>
+{{.CSS}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>{{.Title}}</h1>
+<p class="sub">{{.Verdict}}</p>
+
+<div class="stats">
+{{range .Stats}}  <div class="stat"><div class="k">{{.K}}</div><div class="v">{{.V}} {{if .Small}}<small>&middot; {{.Small}}</small>{{end}}</div></div>
+{{end}}</div>
+
+{{if .Timelapse}}<div class="card">
+  <h2>Timelapse</h2>
+  <video controls preload="metadata" playsinline style="width:100%;border-radius:6px;background:#000" src="{{.Timelapse}}"></video>
+</div>
+{{end}}
+<div class="card">
+  <h2>Stars detected per frame</h2>
+  <p class="note">The cloud signal: a clear, dark sky shows hundreds of stars and cloud hides them. Counted only where
+  the sky is brighter than the telescope and roof, so the count is comparable through the night but not between
+  cameras.</p>
+{{if .RoofNote}}  <p class="note">{{.RoofNote}}</p>{{end}}
+  <div class="chartbox" id="b1"><svg id="c1" viewBox="0 0 940 260">{{.StarsChart}}</svg><div class="tip" id="t1"></div></div>
+</div>
+
+<div class="card">
+  <h2>Sky background</h2>
+  <p class="note">Median sky level between the stars, in camera units. It rises with moonlight, twilight and cloud
+  lit by town.</p>
+  <div class="chartbox" id="b2"><svg id="c2" viewBox="0 0 940 210">{{.SkyChart}}</svg><div class="tip" id="t2"></div></div>
+</div>
+
+<div class="card">
+  <h2>Exposure</h2>
+  <p class="note">What the auto&#8209;exposure chose for each frame.</p>
+  <div class="chartbox" id="b3"><svg id="c3" viewBox="0 0 940 210">{{.ExpChart}}</svg><div class="tip" id="t3"></div></div>
+</div>
+{{if .HasTemp}}
+<div class="card">
+  <h2>Camera sensor temperature</h2>
+  <div class="chartbox" id="b4"><svg id="c4" viewBox="0 0 940 210">{{.TempChart}}</svg><div class="tip" id="t4"></div></div>
+</div>
+{{end}}
+{{if or .Keogram .Startrails}}<div class="card">
+  <h2>Keogram and star trails</h2>
+  <p class="note">The keogram is the centre column of every frame, left to right through the night. The star trails
+  stack the dark frames with the roof open.</p>
+{{if .Keogram}}  <div class="shot" style="margin-bottom:14px"><figure><img alt="Keogram" src="{{.Keogram}}"><figcaption><b>Keogram</b></figcaption></figure></div>
+{{end}}  <div class="shots">
+{{if .Startrails}}    <div class="shot"><figure><img alt="Star trails" src="{{.Startrails}}"><figcaption><b>Star trails</b></figcaption></figure></div>
+{{end}}  </div>
+</div>
+{{end}}
+<div class="card">
+  <h2>Hour by hour</h2>
+{{range .Events}}  <div class="evrow"><time>{{.Time}}</time><span class="pill">{{.Kind}}</span><span>{{.Detail}}</span></div>
+{{end}}
+  <table><thead><tr><th>Hour</th><th>Frames</th><th>Stars (mean)</th><th>Cloud</th><th>Roof</th><th>Exposure</th></tr></thead><tbody>
+{{range .Hours}}    <tr><td>{{.Hour}}</td><td>{{.Frames}}</td><td>{{.Stars}}</td><td>{{.Cloud}}</td><td>{{.Roof}}</td><td>{{.Exposure}}</td></tr>
+{{end}}  </tbody></table>
+</div>
+
+<p class="foot">{{.Foot}}</p>
+</div>
+<script>
+const CH={{.ChartsJSON}};
+function hover(c){
+  const svg=document.getElementById(c.svg),box=document.getElementById(c.box),tip=document.getElementById(c.tip);
+  if(!svg)return;
+  const W=940,L=54,R=62,T=30,B=c.rail?44:30,H=c.h,pw=W-L-R,ph=H-T-B;
+  const X=m=>L+(m/c.span)*pw, Y=v=>T+ph-(Math.min(v,c.ymax)/c.ymax)*ph;
+  const cross=svg.querySelector('.cross'),halo=svg.querySelector('.halo');
+  const hm=m=>{const t=c.o+m,h=Math.floor(t/60)%24,mm=Math.floor(t%60);return String(h).padStart(2,'0')+':'+String(mm).padStart(2,'0');};
+  box.addEventListener('pointermove',e=>{
+    const r=svg.getBoundingClientRect(),mm=Math.max(0,Math.min(c.span,((e.clientX-r.left)/r.width*W-L)/pw*c.span));
+    let best=null,bs=null,bd=1e9;
+    c.series.forEach(s=>s.pts.forEach(p=>{const d=Math.abs(p.m-mm);if(d<bd){bd=d;best=p;bs=s;}}));
+    if(!best||bd>14){tip.style.opacity=0;cross.setAttribute('opacity',0);halo.setAttribute('opacity',0);return;}
+    cross.setAttribute('x1',X(best.m));cross.setAttribute('x2',X(best.m));cross.setAttribute('opacity',.6);
+    halo.setAttribute('cx',X(best.m));halo.setAttribute('cy',Y(best.v));halo.setAttribute('stroke',bs.color);halo.setAttribute('opacity',1);
+    const val=best.v>=10?best.v.toFixed(0):best.v.toFixed(2);
+    tip.innerHTML='<div style="color:var(--text-secondary);margin-bottom:2px">'+hm(best.m)+'</div>'+
+      '<span class="sw" style="background:'+bs.color+'"></span>'+bs.name+' <b>'+val+'</b>';
+    tip.style.opacity=1;
+    tip.style.left=Math.min(r.width-210,Math.max(0,X(best.m)/W*r.width+12))+'px';
+    tip.style.top=Math.max(0,Y(best.v)/H*r.height-46)+'px';
+  });
+  box.addEventListener('pointerleave',()=>{tip.style.opacity=0;cross.setAttribute('opacity',0);halo.setAttribute('opacity',0);});
+}
+CH.forEach(hover);
+</script>
+</body>
+</html>

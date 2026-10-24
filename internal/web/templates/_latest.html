@@ -1,0 +1,27 @@
+{{define "_latest"}}<div id="latest" class="grid" hx-get="/partials/latest" hx-trigger="every 10s" hx-swap="outerMorph">
+  <div class="frame">{{if .Has}}<img src="{{.ImageURL}}" alt="Latest frame, {{.Rec.Time.Format "15:04:05"}}">{{end}}</div>
+  <div class="stack">
+    <div class="panel">
+      <h2>Observatory</h2>
+      {{if .Has}}<dl>
+        <dt>Roof</dt><dd>{{with .Rec.Obs.Roof}}<span class="badge {{if eq . "OPEN"}}ok{{else if eq . "CLOSED"}}muted{{else if eq . "unknown"}}muted{{else}}warn{{end}}">{{.}}</span>{{end}}</dd>
+        <dt>Rain</dt><dd>{{with .Rec.Obs.Rain}}<span class="badge {{if eq . "SAFE"}}ok{{else if eq . "RAIN"}}bad{{else}}muted{{end}}">{{.}}</span>{{end}}</dd>
+        <dt>Sky</dt><dd>{{.Rec.Sky}}{{if not (eq .Rec.Sky "unknown")}} · {{pct .Cloud}} cloud{{end}}</dd>
+        <dt>Stars</dt><dd>{{.Rec.Stars}}</dd>
+        {{with .Rec.Obs.NINA}}{{if .Connected}}<dt>N.I.N.A.</dt><dd>{{if .Mount}}mount {{.Mount}}{{end}}{{if .Filter}} · {{.Filter}}{{end}}</dd>{{end}}{{end}}
+      </dl>{{else}}<p class="note">Waiting for the first frame.</p>{{end}}
+    </div>
+    <div class="panel">
+      <h2>Camera</h2>
+      {{if .Has}}<dl>
+        <dt>Frame</dt><dd>{{.Rec.Time.Format "15:04:05"}} <span class="{{if .Stale}}bad{{else}}muted{{end}}">({{.Age}} ago)</span></dd>
+        <dt>Mode</dt><dd>{{.Rec.Mode}}{{if .Live}} · <span class="badge warn">live</span>{{end}}</dd>
+        <dt>Exposure</dt><dd>{{exposure .Rec.Exposure}} · gain {{.Rec.Gain}}</dd>
+        <dt>Sensor</dt><dd>{{temp .Rec.TempC}}</dd>
+        <dt>Sun</dt><dd>{{printf "%.1f" .Rec.SunAlt}}°</dd>
+        <dt>Moon</dt><dd>{{printf "%.0f" .Rec.MoonAlt}}° · {{pct .Rec.MoonIllum}} lit</dd>
+      </dl>{{end}}
+    </div>
+    <a class="btn" href="/live">Watch live</a>
+  </div>
+</div>{{end}}

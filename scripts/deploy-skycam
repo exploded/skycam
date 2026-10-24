@@ -1,0 +1,55 @@
+#!/bin/bash
+# deploy-skycam - server-side deploy for skycam-web (the relay)
+# Called by GitHub Actions: sudo /usr/local/bin/deploy-skycam /tmp/skycam-deploy
+set -e
+
+BUNDLE="${1:?Usage: deploy-skycam <bundle-dir>}"
+APP_DIR="/var/www/skycam"
+SERVICE="skycam"
+
+SVC_USER=$(systemctl show -p User "$SERVICE" --value 2>/dev/null || echo "www-data")
+[ -z "$SVC_USER" ] && SVC_USER="www-data"
+
+echo "=== deploy-skycam ==="
+
+# Self-update: if the bundle ships a newer copy of this script, install it
+# and re-exec so the rest of the deploy uses the new logic.
+SELF="/usr/local/bin/deploy-skycam"
+BUNDLED="$BUNDLE/scripts/deploy-skycam"
+if [ -f "$BUNDLED" ] && ! cmp -s "$SELF" "$BUNDLED"; then
+    echo "[self-update] installing newer deploy-skycam"
+    install -m 755 "$BUNDLED" "$SELF"
+    exec "$SELF" "$BUNDLE"
+fi
+
+echo "[1/4] stopping $SERVICE"
+systemctl stop "$SERVICE" 2>/dev/null || true
+
+echo "[2/4] installing binary"
+install -m 755 "$BUNDLE/skycam-web" "$APP_DIR/skycam-web"
+
+echo "[3/4] fixing ownership"
+chown -R "$SVC_USER" "$APP_DIR"
+
+echo "[4/4] starting $SERVICE"
+# enable, not just start: provisioning can't enable a unit whose binary
+# doesn't exist yet, and the service must survive a reboot.
+systemctl enable "$SERVICE" >/dev/null 2>&1 || true
+systemctl start "$SERVICE"
+
+for i in 1 2 3 4 5; do
+    if systemctl is-active --quiet "$SERVICE"; then
+        echo "[ok] $SERVICE is running"
+        break
+    fi
+    sleep 1
+done
+
+if ! systemctl is-active --quiet "$SERVICE"; then
+    echo "[error] $SERVICE failed to start"
+    journalctl -u "$SERVICE" --no-pager -n 20
+    exit 1
+fi
+
+rm -rf "$BUNDLE"
+echo "=== deploy complete ==="
