@@ -155,14 +155,22 @@ It is advisory only, never a safety monitor.
 |---|---|
 | `CloudCover` | 0-100, from the star count against the clear-sky baseline |
 | `SkyBrightness` | Sky level in ADU per second at unity gain; instrumental, not lux |
-| `TimeSinceLastUpdate` | Seconds since the newest frame |
+| `TimeSinceLastUpdate` | Seconds since the newest frame, or since the weather reading for an ambient sensor |
+| `Temperature`, `Humidity`, `Pressure`, `DewPoint`, `WindSpeed`, `WindDirection`, `WindGust`, `RainRate` | OpenWeatherMap's current conditions for the site, when `openweathermap.api_key` is set |
 
-Both values read as unavailable (Alpaca error 1026), never as zero, when:
+The camera values read as unavailable (Alpaca error 1026), never as zero,
+when:
 - The newest frame is more than 5 minutes old.
 - The roof isn't known to be open.
 - For `CloudCover`, it's twilight or there's no clear-sky baseline yet.
 
-Everything else is not implemented. Set `alpaca.listen` to `""` to turn the
+The ambient values come from the OpenWeatherMap Current Weather API. skycam
+fetches them every 10 minutes, which is as often as OpenWeatherMap updates,
+and serves the cached reading in between. A reading older than 30 minutes
+reads as unavailable. OpenWeatherMap's cloud cover is never used. Without an
+API key, the ambient sensors are not implemented, and N.I.N.A. greys them out.
+
+`SkyQuality` is not implemented. Set `alpaca.listen` to `""` to turn the
 device off.
 
 ## Sky API

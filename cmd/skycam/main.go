@@ -38,6 +38,7 @@ import (
 	"github.com/exploded/skycam/internal/night"
 	"github.com/exploded/skycam/internal/observatory"
 	"github.com/exploded/skycam/internal/overlay"
+	"github.com/exploded/skycam/internal/owm"
 	"github.com/exploded/skycam/internal/report"
 	"github.com/exploded/skycam/internal/store"
 	"github.com/exploded/skycam/internal/store/db"
@@ -277,6 +278,13 @@ func (a *app) startAlpaca(ctx context.Context) {
 		return
 	}
 	dev := &alpaca.Server{Src: a.hub, MaxAge: c.MaxAge.D(), BlackLevel: a.cfg.Analysis.BlackLevel}
+	if wc := a.cfg.Weather; wc.APIKey != "" {
+		weather := owm.New(owm.Options{APIKey: wc.APIKey, Lat: a.cfg.Latitude, Lon: a.cfg.Longitude,
+			Interval: wc.Interval.D(), MaxAge: wc.MaxAge.D()})
+		go weather.Run(ctx)
+		dev.Weather = weather
+		a.log.Info("openweathermap pass-through on")
+	}
 	go func() {
 		if err := web.Serve(ctx, c.Listen, dev.Handler(), a.log); err != nil {
 			a.log.Warn("alpaca device stopped", "addr", c.Listen, "err", err)

@@ -24,6 +24,7 @@ import (
 
 	"github.com/exploded/skycam/internal/capture"
 	"github.com/exploded/skycam/internal/exposure"
+	"github.com/exploded/skycam/internal/owm"
 )
 
 // Alpaca error numbers (ASCOM spec).
@@ -46,12 +47,21 @@ type Source interface {
 	Latest() *capture.Record
 }
 
+// WeatherSource supplies ambient conditions (the OpenWeatherMap
+// pass-through), so N.I.N.A.'s FITS headers keep temperature, humidity,
+// pressure, dew point and wind when its weather source is skycam.
+type WeatherSource interface {
+	Current() (owm.Reading, error)
+}
+
 // Server implements the Alpaca HTTP API over the newest frame.
 type Server struct {
 	Src        Source
 	MaxAge     time.Duration // a frame older than this is unavailable
 	BlackLevel float64       // ADU subtracted before normalising brightness
 	Now        func() time.Time
+	// Weather is optional; nil leaves the ambient sensors not implemented.
+	Weather WeatherSource
 
 	txn       atomic.Uint32
 	connected atomic.Bool
@@ -155,8 +165,19 @@ func (s *Server) device(w http.ResponseWriter, r *http.Request) {
 		}
 		s.reply(w, r, v, 0, "")
 	case "timesincelastupdate":
-		switch strings.ToLower(param(r, "SensorName")) {
-		case "", "cloudcover", "skybrightness":
+		switch sensor := strings.ToLower(param(r, "SensorName")); {
+		case ambientSensors[sensor]:
+			if s.Weather == nil {
+				s.reply(w, r, nil, errNotImplemented, "sensor not implemented")
+				return
+			}
+			cur, err := s.Weather.Current()
+			if err != nil {
+				s.reply(w, r, nil, errValueNotSet, err.Error())
+				return
+			}
+			s.reply(w, r, s.now().Sub(cur.At).Seconds(), 0, "")
+		case sensor == "", sensor == "cloudcover", sensor == "skybrightness":
 			rec := s.Src.Latest()
 			if rec == nil {
 				s.reply(w, r, nil, errValueNotSet, "no frames yet")
@@ -167,13 +188,15 @@ func (s *Server) device(w http.ResponseWriter, r *http.Request) {
 			s.reply(w, r, nil, errNotImplemented, "sensor not implemented")
 		}
 	case "sensordescription":
-		s.reply(w, r, sensorDescription(param(r, "SensorName")), 0, "")
+		s.reply(w, r, s.sensorDescription(param(r, "SensorName")), 0, "")
+
+	case "temperature", "humidity", "pressure", "dewpoint",
+		"windspeed", "winddirection", "windgust", "rainrate":
+		s.ambient(w, r, prop)
 
 	// skyq filled SkyQuality with its transparency index from N.I.N.A.'s own
 	// frames; the camera has nothing honest to put there.
-	case "skyquality", "starfwhm", "skytemperature",
-		"temperature", "humidity", "pressure", "dewpoint",
-		"windspeed", "winddirection", "windgust", "rainrate":
+	case "skyquality", "starfwhm", "skytemperature":
 		s.reply(w, r, nil, errNotImplemented, "sensor not implemented: "+prop)
 
 	default:
@@ -205,12 +228,56 @@ func (s *Server) brightness(rec *capture.Record) float64 {
 	return math.Max(0, rec.SkyLevel-s.BlackLevel) / (secs * exposure.GainFactor(rec.Gain))
 }
 
-func sensorDescription(sensor string) string {
-	switch strings.ToLower(sensor) {
-	case "cloudcover":
+var ambientSensors = map[string]bool{
+	"temperature": true, "humidity": true, "pressure": true, "dewpoint": true,
+	"windspeed": true, "winddirection": true, "windgust": true, "rainrate": true,
+}
+
+// ambient answers the OpenWeatherMap pass-through sensors: 1024 when no
+// weather source is configured (N.I.N.A. greys the field out), 1026 when
+// the source has no fresh reading (never a stale number shown as current),
+// otherwise the value.
+func (s *Server) ambient(w http.ResponseWriter, r *http.Request, prop string) {
+	if s.Weather == nil {
+		s.reply(w, r, nil, errNotImplemented, "sensor not implemented: "+prop+" (no openweathermap api_key configured)")
+		return
+	}
+	cur, err := s.Weather.Current()
+	if err != nil {
+		s.reply(w, r, nil, errValueNotSet, prop+" unavailable: "+err.Error())
+		return
+	}
+	var v float64
+	switch prop {
+	case "temperature":
+		v = cur.Temperature
+	case "humidity":
+		v = cur.Humidity
+	case "pressure":
+		v = cur.Pressure
+	case "dewpoint":
+		v = cur.DewPoint
+	case "windspeed":
+		v = cur.WindSpeed
+	case "winddirection":
+		v = cur.WindDir
+	case "windgust":
+		v = cur.WindGust
+	case "rainrate":
+		v = cur.RainRate
+	}
+	s.reply(w, r, v, 0, "")
+}
+
+func (s *Server) sensorDescription(sensor string) string {
+	sensor = strings.ToLower(sensor)
+	switch {
+	case sensor == "cloudcover":
 		return "Cloud cover from the all-sky camera's star count against its clear-sky baseline; only with the roof open and the sun below -12 degrees. Advisory."
-	case "skybrightness":
+	case sensor == "skybrightness":
 		return "All-sky camera sky level in ADU per second at unity gain. Instrumental units, not lux."
+	case ambientSensors[sensor] && s.Weather != nil:
+		return "OpenWeatherMap current conditions for the site coordinates (dew point derived with the Magnus formula)."
 	default:
 		return "not implemented"
 	}

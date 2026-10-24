@@ -21,6 +21,8 @@ from: phases M0–M6 (M5 native USB driver and M6 meteors are not built).
   are copied from skyq and must stay in step with skyq's `design/CHARTS.md`
 - `internal/web` — the Pi UI and sky API; `internal/relay` — the relay
 - `internal/alpaca` — ObservingConditions device and discovery responder
+- `internal/owm` — OpenWeatherMap poller for the device's ambient sensors.
+  The request URL carries the API key, so errors must never quote it.
 - `internal/store` — SQLite (modernc + sqlc); `schema.sql` is the source of
   truth; run `sqlc generate` after editing it or `queries.sql`
 - `third_party/zwo` — ZWO SDK 1.41 arm64 `.so` (MIT), udev rule

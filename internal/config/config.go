@@ -151,6 +151,14 @@ type Alpaca struct {
 	MaxAge    Duration `json:"max_age"`   // older frames read as unavailable
 }
 
+// OpenWeatherMap passes ambient conditions through the Alpaca device. An
+// empty APIKey turns it off; its cloud cover is never used.
+type OpenWeatherMap struct {
+	APIKey   string   `json:"api_key"`
+	Interval Duration `json:"interval"` // between fetches; OWM updates every 10 min
+	MaxAge   Duration `json:"max_age"`  // older readings read as unavailable
+}
+
 type Live struct {
 	// NightLimit caps a live session at night, because live mode pauses
 	// still capture and leaves a gap in the timelapse.
@@ -177,16 +185,17 @@ type Config struct {
 	RetentionNights int `json:"retention_nights"` // frames
 	ProductDays     int `json:"product_days"`     // mp4, keogram, startrails, report
 
-	Camera      Camera      `json:"camera"`
-	Exposure    Exposure    `json:"exposure"`
-	Overlay     Overlay     `json:"overlay"`
-	Observatory Observatory `json:"observatory"`
-	Analysis    Analysis    `json:"analysis"`
-	Timelapse   Timelapse   `json:"timelapse"`
-	Live        Live        `json:"live"`
-	S3          S3          `json:"s3"`
-	Relay       Relay       `json:"relay"`
-	Alpaca      Alpaca      `json:"alpaca"`
+	Camera      Camera         `json:"camera"`
+	Exposure    Exposure       `json:"exposure"`
+	Overlay     Overlay        `json:"overlay"`
+	Observatory Observatory    `json:"observatory"`
+	Analysis    Analysis       `json:"analysis"`
+	Timelapse   Timelapse      `json:"timelapse"`
+	Live        Live           `json:"live"`
+	S3          S3             `json:"s3"`
+	Relay       Relay          `json:"relay"`
+	Alpaca      Alpaca         `json:"alpaca"`
+	Weather     OpenWeatherMap `json:"openweathermap"`
 
 	MonitorURL    string `json:"monitor_url"`
 	MonitorAPIKey string `json:"monitor_api_key"`
@@ -271,7 +280,8 @@ func Default() Config {
 			LiveFPS:   2,
 			LiveWidth: 960,
 		},
-		Alpaca: Alpaca{Listen: ":11111", Discovery: true, MaxAge: Duration(5 * time.Minute)},
+		Alpaca:  Alpaca{Listen: ":11111", Discovery: true, MaxAge: Duration(5 * time.Minute)},
+		Weather: OpenWeatherMap{Interval: Duration(10 * time.Minute), MaxAge: Duration(30 * time.Minute)},
 	}
 }
 

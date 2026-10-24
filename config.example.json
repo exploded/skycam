@@ -79,6 +79,12 @@
     "max_age": "5m"
   },
 
+  "openweathermap": {
+    "api_key": "",
+    "interval": "10m",
+    "max_age": "30m"
+  },
+
   "monitor_url": "https://monitor.mchugh.au",
   "monitor_api_key": ""
 }
