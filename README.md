@@ -109,15 +109,17 @@ The first deploy provisions the Pi, and later deploys update it.
 
 1. Flash Raspberry Pi OS Lite (64-bit) to a new SD card with Raspberry Pi
    Imager. Set the hostname to `allsky` and enable SSH with your key.
-2. Swap the card into the Pi. Keep the allsky card: it's the rollback.
-3. From this repo, run `.\scripts\pi\deploy-pi.ps1 -Target <user>@allsky.local`.
+2. From this repo, run `.\scripts\pi\deploy-pi.ps1 -Target <user>@allsky.local`.
    The script builds `skycam` for arm64, copies it to the Pi with the ZWO SDK
    and udev rule, and runs [scripts/pi/setup.sh](scripts/pi/setup.sh).
-4. On the Pi, edit `/etc/skycam/config.json`: choose an `images_user` and
-   `images_password`, then set the relay token and S3 keys. Put the same pair
-   in skyq's config as `allsky_username` and `allsky_password`; skyq sends no
-   credentials without them. Leave both empty to turn the auth off.
-5. Run `sudo systemctl restart skycam`, then open http://allsky.local/.
+3. On the Pi, edit `/etc/skycam/config.json`. Set `latitude` and `longitude`
+   to the observatory's, and the `observatory` URLs to the roof, rain sensor
+   and N.I.N.A. addresses; the example's values are placeholders. Choose an
+   `images_user` and `images_password`, then set the relay token and S3 keys.
+   Put the same pair in skyq's config as `allsky_username` and
+   `allsky_password`; skyq sends no credentials without them. Leave both empty
+   to turn the auth off.
+4. Run `sudo systemctl restart skycam`, then open http://allsky.local/.
 
 ## Deploy the relay
 

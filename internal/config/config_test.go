@@ -46,7 +46,7 @@ func TestSettingsOverConfig(t *testing.T) {
 	base.ImagesPassword = "from-config"
 	os.WriteFile(base.SettingsPath(), []byte(`{
   "exposure": {"night": {"max_exposure": "8s"}},
-  "observatory": {"roof_url": "http://192.168.1.50/status.json"},
+  "observatory": {"roof_url": "http://192.168.1.60/status.json"},
   "images_password": "from-page",
   "data_dir": "/elsewhere"
 }`), 0o644)
@@ -54,7 +54,7 @@ func TestSettingsOverConfig(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.Exposure.Night.MaxExposure.D() != 8*time.Second || cfg.Observatory.RoofURL != "http://192.168.1.50/status.json" {
+	if cfg.Exposure.Night.MaxExposure.D() != 8*time.Second || cfg.Observatory.RoofURL != "http://192.168.1.60/status.json" {
 		t.Errorf("settings not applied: %+v %+v", cfg.Exposure.Night, cfg.Observatory)
 	}
 	if cfg.ImagesPassword != "from-config" || cfg.DataDir != base.DataDir {
@@ -75,7 +75,7 @@ func TestBadSettingsIgnored(t *testing.T) {
 		"invalid": `{"exposure": {"night": {"min_exposure": "10s", "max_exposure": "1s"}}}`,
 		"unknown": `{"camera": {"drvier": "fake"}}`,
 		"broken":  `{"exposure": `,
-		"alpaca":  `{"observatory": {"roof_url": "http://192.168.1.142:11111/status.json"}}`,
+		"alpaca":  `{"observatory": {"roof_url": "http://192.168.1.50:11111/status.json"}}`,
 	} {
 		base := Default()
 		base.DataDir = t.TempDir()

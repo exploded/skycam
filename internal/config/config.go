@@ -105,7 +105,7 @@ type Overlay struct {
 type Observatory struct {
 	RoofURL      string   `json:"roof_url"` // rolloff /status.json on port 80, never 11111
 	RainURL      string   `json:"rain_url"` // rg11 /status.json on port 80
-	NINAURL      string   `json:"nina_url"` // Advanced API base, e.g. http://192.168.1.144:1888
+	NINAURL      string   `json:"nina_url"` // Advanced API base, e.g. http://192.168.1.52:1888
 	PollInterval Duration `json:"poll_interval"`
 	// StaleAfter is how old a reading may be before it reads unknown.
 	StaleAfter Duration `json:"stale_after"`
@@ -308,9 +308,9 @@ func Default() Config {
 		},
 		Overlay: Overlay{Enabled: true, Observatory: true},
 		Observatory: Observatory{
-			RoofURL:      "http://192.168.1.142/status.json",
-			RainURL:      "http://192.168.1.141/status.json",
-			NINAURL:      "http://192.168.1.144:1888",
+			RoofURL:      "http://192.168.1.50/status.json",
+			RainURL:      "http://192.168.1.51/status.json",
+			NINAURL:      "http://192.168.1.52:1888",
 			PollInterval: Duration(10 * time.Second),
 			StaleAfter:   Duration(60 * time.Second),
 			Timeout:      Duration(4 * time.Second),

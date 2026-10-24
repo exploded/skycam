@@ -130,7 +130,7 @@ func TestSettingsRejectsBadValues(t *testing.T) {
 	for name, change := range map[string][2]string{
 		"not a duration": {"exposure.night.max_exposure", "five seconds"},
 		"min over max":   {"exposure.night.min_exposure", "10s"},
-		"alpaca port":    {"observatory.roof_url", "http://192.168.1.142:11111/status.json"},
+		"alpaca port":    {"observatory.roof_url", "http://192.168.1.50:11111/status.json"},
 		"bad rect":       {"exposure.meter", "0, 0.2, 1"},
 		"bad option":     {"timelapse.preset", "warp"},
 	} {
@@ -173,11 +173,11 @@ func TestSettingsLocalOnly(t *testing.T) {
 		method               string
 		want                 int
 	}{
-		{"192.168.1.5:5000", "192.168.1.143", "", http.MethodGet, 200},
+		{"192.168.1.5:5000", "192.168.1.53", "", http.MethodGet, 200},
 		{"127.0.0.1:5000", "localhost:8999", "", http.MethodGet, 200},
 		{"[fd00::5]:5000", "allsky.local", "", http.MethodGet, 200},
 		{"[fe80::1]:5000", "allsky", "", http.MethodGet, 200},
-		{"8.8.8.8:5000", "192.168.1.143", "", http.MethodGet, 403},
+		{"8.8.8.8:5000", "192.168.1.53", "", http.MethodGet, 403},
 		{"[2001:db8:1:0:17da:7304:a7a9:f82a]:5000", "allsky.local", "", http.MethodGet, 200},
 		{"[2001:db8::1]:5000", "allsky.local", "", http.MethodGet, 403},
 		// DNS rebinding: an outside name pointed at the Pi.

@@ -35,9 +35,9 @@
   "overlay": { "enabled": true, "observatory": true },
 
   "observatory": {
-    "roof_url": "http://192.168.1.142/status.json",
-    "rain_url": "http://192.168.1.141/status.json",
-    "nina_url": "http://192.168.1.144:1888",
+    "roof_url": "http://192.168.1.50/status.json",
+    "rain_url": "http://192.168.1.51/status.json",
+    "nina_url": "http://192.168.1.52:1888",
     "poll_interval": "10s",
     "stale_after": "60s",
     "timeout": "4s"

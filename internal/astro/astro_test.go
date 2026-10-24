@@ -24,8 +24,8 @@ func TestSunAltitude(t *testing.T) {
 		want float64
 		tol  float64
 	}{
-		// Solar noon in late October: 90 − (37.8 − 12.0) ≈ 64°.
-		{"noon", time.Date(2026, 10, 24, 13, 6, 0, 0, loc), 64.0, 1.0},
+		// Solar noon in late October: 90 − (37.0 − 12.0) ≈ 65°.
+		{"noon", time.Date(2026, 10, 24, 13, 6, 0, 0, loc), 65.0, 1.0},
 		// allsky's first night frame (sun angle −6°) on 2026-10-23.
 		{"allsky start", time.Date(2026, 10, 23, 20, 10, 25, 0, loc), -6.0, 1.5},
 		// Midnight, well below the horizon.
@@ -58,7 +58,7 @@ func TestMoonAltitudeRange(t *testing.T) {
 		a := MoonAltitude(start.Add(time.Duration(h)*time.Hour), lat, lon)
 		lo, hi = min(lo, a), max(hi, a)
 	}
-	// From −37.8°, the moon peaks around 90 − 37.8 + 28.6 ≈ 81° at most.
+	// From −37°, the moon peaks around 90 − 37 + 28.6 ≈ 82° at most.
 	if hi < 40 || hi > 85 || lo > -40 {
 		t.Errorf("moon altitude range %.1f..%.1f looks wrong", lo, hi)
 	}

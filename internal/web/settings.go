@@ -85,7 +85,7 @@ var settingsGroups = []group{
 	{"Observatory", []field{
 		{Key: "observatory.roof_url", Label: "Roof controller", Help: "The roll-off's status.json on port 80. Empty turns it off.", Kind: "url", Check: "roof"},
 		{Key: "observatory.rain_url", Label: "Rain sensor (safety monitor)", Help: "The RG11's status.json on port 80. Empty turns it off.", Kind: "url", Check: "rain"},
-		{Key: "observatory.nina_url", Label: "N.I.N.A. Advanced API", Help: "Base address, e.g. http://192.168.1.144:1888. Empty turns it off.", Kind: "url", Check: "nina"},
+		{Key: "observatory.nina_url", Label: "N.I.N.A. Advanced API", Help: "Base address, e.g. http://192.168.1.52:1888. Empty turns it off.", Kind: "url", Check: "nina"},
 		{Key: "observatory.poll_interval", Label: "Poll every", Kind: "duration"},
 		{Key: "observatory.stale_after", Label: "Unknown after", Help: "An older reading shows as unknown, never closed or safe.", Kind: "duration"},
 		{Key: "observatory.timeout", Label: "Request timeout", Kind: "duration"},
