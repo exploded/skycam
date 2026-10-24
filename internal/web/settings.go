@@ -472,7 +472,39 @@ func privateClient(remote string) bool {
 		return false
 	}
 	a = a.Unmap()
-	return a.IsLoopback() || a.IsPrivate() || a.IsLinkLocalUnicast()
+	if a.IsLoopback() || a.IsPrivate() || a.IsLinkLocalUnicast() {
+		return true
+	}
+	// Home IPv6 addresses are global, so a client on the home network can
+	// only be told apart by sharing a subnet with one of the Pi's own.
+	for _, p := range localPrefixes() {
+		if p.Contains(a) {
+			return true
+		}
+	}
+	return false
+}
+
+// localPrefixes is the subnets of the Pi's own interfaces; tests replace it.
+var localPrefixes = func() []netip.Prefix {
+	addrs, err := net.InterfaceAddrs()
+	if err != nil {
+		return nil
+	}
+	var out []netip.Prefix
+	for _, a := range addrs {
+		n, ok := a.(*net.IPNet)
+		if !ok {
+			continue
+		}
+		ip, ok := netip.AddrFromSlice(n.IP)
+		if !ok {
+			continue
+		}
+		bits, _ := n.Mask.Size()
+		out = append(out, netip.PrefixFrom(ip.Unmap(), bits).Masked())
+	}
+	return out
 }
 
 func localHost(hostport string) bool {

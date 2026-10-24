@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"net/netip"
 	"net/url"
 	"os"
 	"strings"
@@ -161,6 +162,12 @@ func TestSettingsReset(t *testing.T) {
 func TestSettingsLocalOnly(t *testing.T) {
 	_, s, _ := settingsServer(t)
 	h, _ := s.Handler()
+	// The Pi's home subnet, with global IPv6 as home networks have.
+	orig := localPrefixes
+	localPrefixes = func() []netip.Prefix {
+		return []netip.Prefix{netip.MustParsePrefix("2001:db8:1::/64")}
+	}
+	t.Cleanup(func() { localPrefixes = orig })
 	for _, c := range []struct {
 		remote, host, origin string
 		method               string
@@ -171,6 +178,7 @@ func TestSettingsLocalOnly(t *testing.T) {
 		{"[fd00::5]:5000", "allsky.local", "", http.MethodGet, 200},
 		{"[fe80::1]:5000", "allsky", "", http.MethodGet, 200},
 		{"8.8.8.8:5000", "192.168.1.143", "", http.MethodGet, 403},
+		{"[2001:db8:1:0:17da:7304:a7a9:f82a]:5000", "allsky.local", "", http.MethodGet, 200},
 		{"[2001:db8::1]:5000", "allsky.local", "", http.MethodGet, 403},
 		// DNS rebinding: an outside name pointed at the Pi.
 		{"192.168.1.5:5000", "evil.example.com", "", http.MethodGet, 403},
