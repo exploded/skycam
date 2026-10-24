@@ -300,7 +300,7 @@ func (u *Uploader) shrink(j []byte) []byte {
 	dst := image.NewRGBA(image.Rect(0, 0, w, b.Dy()*w/b.Dx()))
 	xdraw.ApproxBiLinear.Scale(dst, dst.Bounds(), src, b, xdraw.Src, nil)
 	var buf bytes.Buffer
-	if jpeg.Encode(&buf, dst, &jpeg.Options{Quality: 70}) != nil {
+	if jpeg.Encode(&buf, dst, &jpeg.Options{Quality: u.cfg.Relay.LiveQuality}) != nil {
 		return j
 	}
 	return buf.Bytes()

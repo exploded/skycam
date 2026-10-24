@@ -22,6 +22,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/exploded/skycam/internal/analysis"
 	"github.com/exploded/skycam/internal/capture"
 	"github.com/exploded/skycam/internal/exposure"
 	"github.com/exploded/skycam/internal/owm"
@@ -224,7 +225,7 @@ func cloudReason(rec *capture.Record) string {
 	switch {
 	case !rec.Obs.RoofOpen():
 		return "roof " + strings.ToLower(rec.Obs.Roof)
-	case rec.Mode != "night" || rec.SunAlt >= -12:
+	case rec.Mode != "night" || rec.SunAlt >= analysis.DarkSunAlt:
 		return "not dark enough"
 	default:
 		return "no clear-sky baseline yet"
@@ -287,7 +288,7 @@ func (s *Server) sensorDescription(sensor string) string {
 	sensor = strings.ToLower(sensor)
 	switch {
 	case sensor == "cloudcover":
-		return "Cloud cover from the all-sky camera's star count against its clear-sky baseline; only with the roof open and the sun below -12 degrees. Advisory."
+		return fmt.Sprintf("Cloud cover from the all-sky camera's star count against its clear-sky baseline; only with the roof open and the sun below %g degrees. Advisory.", analysis.DarkSunAlt)
 	case sensor == "skybrightness":
 		return "All-sky camera sky level in ADU per second at unity gain. Instrumental units, not lux."
 	case sensor == "skyquality":

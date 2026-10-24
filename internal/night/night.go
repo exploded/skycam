@@ -112,13 +112,13 @@ func (p *Processor) Process(ctx context.Context, night string) (Result, error) {
 	if err != nil {
 		p.Log.Warn("keogram/startrails failed", "night", night, "err", err)
 	} else {
-		if err := writeJPEG(filepath.Join(res.Dir, "keogram-"+night+".jpg"), keo); err == nil {
+		if err := p.writeJPEG(filepath.Join(res.Dir, "keogram-"+night+".jpg"), keo); err == nil {
 			res.Keogram = "keogram-" + night + ".jpg"
 		} else {
 			p.Log.Warn("writing keogram", "err", err)
 		}
 		if trails != nil {
-			if err := writeJPEG(filepath.Join(res.Dir, "startrails-"+night+".jpg"), trails); err == nil {
+			if err := p.writeJPEG(filepath.Join(res.Dir, "startrails-"+night+".jpg"), trails); err == nil {
 				res.Startrails = "startrails-" + night + ".jpg"
 			} else {
 				p.Log.Warn("writing startrails", "err", err)
@@ -126,7 +126,7 @@ func (p *Processor) Process(ctx context.Context, night string) (Result, error) {
 		}
 	}
 
-	if err := thumbnail(filepath.Join(p.Cfg.ImagesDir(), night, names[len(names)/2]), filepath.Join(res.Dir, ThumbnailName(night))); err != nil {
+	if err := p.thumbnail(filepath.Join(p.Cfg.ImagesDir(), night, names[len(names)/2]), filepath.Join(res.Dir, ThumbnailName(night))); err != nil {
 		p.Log.Warn("thumbnail failed", "night", night, "err", err)
 	} else {
 		res.Thumbnail = ThumbnailName(night)
@@ -186,18 +186,17 @@ func (p *Processor) roofClosed(ctx context.Context, night string) map[string]boo
 	return out
 }
 
-// startrailsMaxMean leaves out frames brighter than this (twilight, cloud
-// lit by town, the roof under a light) — they would wash the trails out.
-const startrailsMaxMean = 90
-
-// stack makes the keogram (the centre column of every frame, side by side)
-// and startrails (the per-pixel maximum of the dark, roof-open frames) in
-// one decoding pass.
+// stack makes the keogram (one column of every frame, the centre by
+// default, side by side) and startrails (the per-pixel maximum of the
+// dark, roof-open frames) in one decoding pass. Frames brighter than
+// products.startrails_max_mean (twilight, cloud lit by town, the roof
+// under a light) are left out of the trails; they would wash them out.
 func (p *Processor) stack(night string, names []string, closed map[string]bool) (*image.RGBA, *image.Gray, error) {
 	var keo *image.RGBA
 	var trails *image.Gray
 	var exclude []image.Rectangle
 	used := 0
+	pc := p.Cfg.Products
 	for i, name := range names {
 		g, err := decodeLuma(filepath.Join(p.Cfg.ImagesDir(), night, name))
 		if err != nil {
@@ -209,12 +208,12 @@ func (p *Processor) stack(night string, names []string, closed map[string]bool) 
 			keo = image.NewRGBA(image.Rect(0, 0, len(names), b.Dy()))
 			exclude = config.PixelRects(p.Cfg.Exposure.Exclude, b.Dx(), b.Dy())
 		}
-		cx := b.Min.X + b.Dx()/2
+		cx := b.Min.X + min(int(float64(b.Dx())*pc.KeogramColumn), b.Dx()-1)
 		for y := 0; y < min(b.Dy(), keo.Bounds().Dy()); y++ {
 			v := g.Pix[g.PixOffset(cx, b.Min.Y+y)]
 			keo.SetRGBA(i, y, color.RGBA{v, v, v, 0xff})
 		}
-		if closed[name] || meanOf(g) > startrailsMaxMean {
+		if closed[name] || meanOf(g) > pc.StartrailsMaxMean {
 			continue
 		}
 		if trails == nil {
@@ -237,22 +236,20 @@ func (p *Processor) stack(night string, names []string, closed map[string]bool) 
 		for _, r := range exclude {
 			draw.Draw(trails, r, image.Black, image.Point{}, draw.Src)
 		}
-		if used < 10 {
+		if used < pc.StartrailsMinFrames {
 			trails = nil
 		}
 	}
 	// A short or sparse night makes a narrow keogram; widen it by repeating
 	// columns before labelling, so the labels stay legible.
-	if w := keo.Bounds().Dx(); w < keogramMinWidth {
-		wide := image.NewRGBA(image.Rect(0, 0, keogramMinWidth, keo.Bounds().Dy()))
+	if w := keo.Bounds().Dx(); w < pc.KeogramMinWidth {
+		wide := image.NewRGBA(image.Rect(0, 0, pc.KeogramMinWidth, keo.Bounds().Dy()))
 		xdraw.NearestNeighbor.Scale(wide, wide.Bounds(), keo, keo.Bounds(), xdraw.Src, nil)
 		keo = wide
 	}
 	p.labelKeogram(keo, night, names, float64(keo.Bounds().Dx())/float64(len(names)))
 	return keo, trails, nil
 }
-
-const keogramMinWidth = 1280
 
 // labelKeogram marks each hour with a line and its time, as allsky does.
 // xs is the keogram's width per frame.
@@ -326,9 +323,9 @@ func meanOf(g *image.Gray) float64 {
 	return float64(sum) / float64((len(g.Pix)+6)/7)
 }
 
-func writeJPEG(path string, img image.Image) error {
+func (p *Processor) writeJPEG(path string, img image.Image) error {
 	var buf bytes.Buffer
-	if err := jpeg.Encode(&buf, img, &jpeg.Options{Quality: 90}); err != nil {
+	if err := jpeg.Encode(&buf, img, &jpeg.Options{Quality: p.Cfg.Products.JPEGQuality}); err != nil {
 		return err
 	}
 	return fsutil.WriteFileAtomic(path, buf.Bytes())
@@ -358,9 +355,9 @@ func (p *Processor) timelapse(ctx context.Context, night string, names []string,
 		"-vf", fmt.Sprintf("fps=%d,scale=trunc(iw/2)*2:trunc(ih/2)*2,format=yuv420p", fps)}
 	switch tl.Codec {
 	case "h264_v4l2m2m":
-		args = append(args, "-c:v", "h264_v4l2m2m", "-b:v", "8M")
+		args = append(args, "-c:v", "h264_v4l2m2m", "-b:v", tl.Bitrate)
 	default:
-		args = append(args, "-c:v", "libx264", "-preset", "veryfast", "-crf", fmt.Sprint(max(tl.CRF, 1)))
+		args = append(args, "-c:v", "libx264", "-preset", tl.Preset, "-crf", fmt.Sprint(max(tl.CRF, 1)))
 	}
 	args = append(args, "-movflags", "+faststart", tmp)
 	cmd := exec.CommandContext(ctx, tl.FFmpeg, args...)
@@ -433,7 +430,7 @@ func ThumbnailName(night string) string { return "thumbnail-" + night + ".jpg" }
 
 // thumbnail scales the middle frame of the night to 320 pixels wide, as a
 // poster for video listings (allsky's videos/thumbnails/).
-func thumbnail(src, dst string) error {
+func (p *Processor) thumbnail(src, dst string) error {
 	f, err := os.Open(src)
 	if err != nil {
 		return err
@@ -447,5 +444,5 @@ func thumbnail(src, dst string) error {
 	const w = 320
 	out := image.NewRGBA(image.Rect(0, 0, w, b.Dy()*w/b.Dx()))
 	xdraw.ApproxBiLinear.Scale(out, out.Bounds(), img, b, xdraw.Src, nil)
-	return writeJPEG(dst, out)
+	return p.writeJPEG(dst, out)
 }

@@ -2,6 +2,7 @@ package web
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"regexp"
 	"time"
@@ -65,7 +66,7 @@ func (s *Server) skyNight(w http.ResponseWriter, r *http.Request) {
 
 	out := skyNightJSON{
 		Night: n, Timezone: s.Loc.String(), Frames: make([]skyFrameJSON, len(rows)),
-		OnsetRule: "first of 3 consecutive frames with cloud >= 0.5; unknown breaks a run",
+		OnsetRule: fmt.Sprintf("first of %d consecutive frames with cloud >= %g; unknown breaks a run", analysis.OnsetRun, analysis.OnsetCloud),
 	}
 	cover := make([]float64, len(rows))
 	for i, f := range rows {

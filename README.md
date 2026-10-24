@@ -82,6 +82,27 @@ so the file only needs what differs, and an unknown key is an error.
 The defaults copy allsky's settings for this camera: 5 s at gain 50 at night,
 one frame about every 20 seconds.
 
+### Settings page
+
+http://allsky.local/settings changes the rest of the settings without SSH.
+It has no login: it answers only devices on the home network, and the Pi has
+no port open to the internet.
+
+- **Save and restart** writes the changes to
+  `/var/lib/skycam/settings.json`, which skycam reads over config.json at
+  start-up. skycam then exits, and systemd starts it again in about 10
+  seconds. Night processing that's under way finishes first.
+- settings.json holds only the values that differ from config.json. **Use
+  default** puts one setting back; **Reset all to config.json** empties the
+  file.
+- **Check**, next to the roof, rain and N.I.N.A. addresses, reads the device
+  once, so you can test a new address before you save it.
+- Passwords, keys, paths, listeners and skyq's 6–30% band stay in
+  config.json. The page lists them, with secrets shown only as set or not
+  set.
+- If settings.json is bad, skycam runs on config.json alone and the page says
+  why.
+
 ## Deploy to the Pi
 
 The first deploy provisions the Pi, and later deploys update it.
@@ -92,12 +113,11 @@ The first deploy provisions the Pi, and later deploys update it.
 3. From this repo, run `.\scripts\pi\deploy-pi.ps1 -Target <user>@allsky.local`.
    The script builds `skycam` for arm64, copies it to the Pi with the ZWO SDK
    and udev rule, and runs [scripts/pi/setup.sh](scripts/pi/setup.sh).
-4. On the Pi, edit `/etc/skycam/config.json`: set `images_password` to the
-   password in skyq's config, then the relay token and S3 keys.
+4. On the Pi, edit `/etc/skycam/config.json`: choose an `images_user` and
+   `images_password`, then set the relay token and S3 keys. Put the same pair
+   in skyq's config as `allsky_username` and `allsky_password`; skyq sends no
+   credentials without them. Leave both empty to turn the auth off.
 5. Run `sudo systemctl restart skycam`, then open http://allsky.local/.
-
-After the switch, run `skyq calibrate` on the NUC. skycam's auto-exposure
-changes the brightness levels skyq's cloud threshold was tuned on.
 
 ## Deploy the relay
 

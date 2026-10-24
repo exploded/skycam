@@ -144,7 +144,7 @@ func Render(in Input) ([]byte, error) {
 		if f.Roof == "OPEN" {
 			open += dt
 		}
-		if f.SunAlt < -12 && f.Roof == "OPEN" {
+		if f.SunAlt < analysis.DarkSunAlt && f.Roof == "OPEN" {
 			dark += dt
 			if mag := store.Value(f.SkyMag); !math.IsNaN(mag) && (math.IsNaN(bestMag) || mag > bestMag) {
 				bestMag = mag
@@ -152,7 +152,7 @@ func Render(in Input) ([]byte, error) {
 		}
 		if f.Cloud.Valid {
 			cloudKnown += dt
-			if f.Cloud.Float64 < 0.3 {
+			if f.Cloud.Float64 < analysis.ClearBelow {
 				clear += dt
 			}
 		}

@@ -89,6 +89,7 @@ type Poller struct {
 	NINAURL    string
 	Interval   time.Duration
 	StaleAfter time.Duration
+	Timeout    time.Duration // per request; zero means 4 s
 	Client     *http.Client
 	Log        *slog.Logger
 
@@ -132,7 +133,7 @@ func (p *Poller) Snapshot(now time.Time) Snapshot {
 // Run polls until ctx ends.
 func (p *Poller) Run(ctx context.Context) {
 	if p.Client == nil {
-		p.Client = &http.Client{Timeout: 4 * time.Second}
+		p.Client = &http.Client{Timeout: p.timeout()}
 	}
 	if p.Log == nil {
 		p.Log = slog.Default()
@@ -148,6 +149,37 @@ func (p *Poller) Run(ctx context.Context) {
 		case <-t.C:
 		}
 	}
+}
+
+func (p *Poller) timeout() time.Duration {
+	if p.Timeout > 0 {
+		return p.Timeout
+	}
+	return 4 * time.Second
+}
+
+// Check reads one source once — "roof", "rain" or "nina" at url — and
+// describes what it answered, so the settings page can try an address
+// before saving it.
+func Check(ctx context.Context, source, url string, timeout time.Duration) (string, error) {
+	p := &Poller{RoofURL: url, RainURL: url, NINAURL: url, Timeout: timeout}
+	p.Client = &http.Client{Timeout: p.timeout()}
+	switch source {
+	case "roof":
+		return p.pollRoof(ctx)
+	case "rain":
+		return p.pollRain(ctx)
+	case "nina":
+		st, err := p.pollNINA(ctx)
+		if err != nil {
+			return "", err
+		}
+		if l := (Snapshot{NINA: st}).Lines(); len(l) > 1 {
+			return l[1].Text, nil
+		}
+		return "connected, no mount", nil
+	}
+	return "", fmt.Errorf("unknown source %q", source)
 }
 
 func (p *Poller) pollAll(ctx context.Context) {

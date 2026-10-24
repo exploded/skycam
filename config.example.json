@@ -5,8 +5,8 @@
   "listen": ":80",
   "data_dir": "/var/lib/skycam",
 
-  "images_user": "admin",
-  "images_password": "CHANGE-ME (the password skyq's config.json uses for allsky)",
+  "images_user": "skyq",
+  "images_password": "CHANGE-ME (also skyq's allsky_password)",
 
   "jpeg_quality": 90,
   "retention_nights": 14,
@@ -19,7 +19,8 @@
     "offset": 0,
     "bandwidth": 40,
     "flip": 0,
-    "snap": false
+    "snap": false,
+    "max_failures": 10
   },
 
   "exposure": {
@@ -27,7 +28,8 @@
     "day":   { "interval": "30s", "min_exposure": "32us", "max_exposure": "2s", "min_gain": 0,  "max_gain": 0,  "target": 100, "save": false },
     "night": { "interval": "20s", "min_exposure": "1ms",  "max_exposure": "5s", "min_gain": 50, "max_gain": 50, "target": 70,  "save": true },
     "meter":   { "x0": 0, "y0": 0.15, "x1": 1, "y1": 0.85 },
-    "exclude": [ { "x0": 0, "y0": 0, "x1": 0.3, "y1": 0.15 }, { "x0": 0, "y0": 0.88, "x1": 0.5, "y1": 1 } ]
+    "exclude": [ { "x0": 0, "y0": 0, "x1": 0.3, "y1": 0.15 }, { "x0": 0, "y0": 0.88, "x1": 0.5, "y1": 1 } ],
+    "deadband": 0.10
   },
 
   "overlay": { "enabled": true, "observatory": true },
@@ -37,7 +39,8 @@
     "rain_url": "http://192.168.1.141/status.json",
     "nina_url": "http://192.168.1.144:1888",
     "poll_interval": "10s",
-    "stale_after": "60s"
+    "stale_after": "60s",
+    "timeout": "4s"
   },
 
   "analysis": {
@@ -48,12 +51,28 @@
     "sky_zero_point": 20,
     "black_level": 0,
     "sqm_offset": 0.6,
-    "sky": { "x0": 0, "y0": 0.15, "x1": 1, "y1": 0.85 }
+    "sky": { "x0": 0, "y0": 0.15, "x1": 1, "y1": 0.85 },
+    "min_delta": 4,
+    "max_star_area": 20,
+    "dark_frac": 0.6,
+    "hot_decay": 0.95,
+    "hot_threshold": 0.5,
+    "baseline_window": 2000,
+    "baseline_min": 30,
+    "baseline_percentile": 90
   },
 
-  "timelapse": { "enabled": true, "fps": 25, "codec": "libx264", "crf": 23, "ffmpeg": "ffmpeg" },
+  "timelapse": { "enabled": true, "fps": 25, "codec": "libx264", "crf": 23, "ffmpeg": "ffmpeg", "preset": "veryfast", "bitrate": "8M" },
 
-  "live": { "night_limit": "10m", "idle_stop": "60s", "max_exposure": "500ms" },
+  "products": {
+    "startrails_max_mean": 90,
+    "startrails_min_frames": 10,
+    "keogram_column": 0.5,
+    "keogram_min_width": 1280,
+    "jpeg_quality": 90
+  },
+
+  "live": { "night_limit": "10m", "idle_stop": "60s", "max_exposure": "500ms", "block_for": "30m", "jpeg_quality": 75 },
 
   "s3": {
     "enabled": false,
@@ -72,7 +91,8 @@
     "token": "CHANGE-ME (same as SKYCAM_TOKEN in the relay's .env)",
     "every": "30s",
     "live_fps": 2,
-    "live_width": 960
+    "live_width": 960,
+    "live_quality": 70
   },
   "alpaca": {
     "listen": ":11111",

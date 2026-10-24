@@ -1,0 +1,98 @@
+{{define "content"}}<style>
+.settings { max-width: 860px; margin: 0 auto; }
+.settings .panel + .panel { margin-top: 16px; }
+.row { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 4px 16px; padding: 10px 0; border-top: 1px solid var(--border); }
+.panel h2 + .row { border-top: 0; }
+.row label { font-weight: 500; padding-top: 6px; }
+.row .help { grid-column: 2; color: var(--muted); font-size: 13px; }
+.row .err { grid-column: 2; color: var(--bad); font-size: 13px; font-weight: 600; }
+.row.changed label::after { content: " •"; color: var(--accent); }
+.row input[type=text], .row select, .row textarea { width: 100%; font: inherit; padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--text); }
+.row textarea { font-family: ui-monospace, Consolas, monospace; font-size: 14px; min-height: 64px; }
+.row input[type=checkbox] { width: 18px; height: 18px; margin-top: 8px; }
+.row.bad input, .row.bad textarea, .row.bad select { border-color: var(--bad); }
+.control { display: flex; gap: 8px; align-items: flex-start; flex-wrap: wrap; }
+.control > input[type=text], .control > select, .control > textarea { flex: 1 1 240px; }
+.def { color: var(--muted); font-size: 13px; padding-top: 7px; white-space: nowrap; }
+button.small { font: inherit; font-size: 13px; padding: 5px 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); cursor: pointer; }
+.result { grid-column: 2; font-size: 13px; }
+.bar { position: sticky; bottom: 0; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; padding: 12px 16px; margin-top: 16px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; }
+.bar .note { margin-right: auto; }
+button.btn { border: 0; font: inherit; font-weight: 600; cursor: pointer; }
+.alert { border-left: 4px solid var(--bad); }
+.locked dd { overflow-wrap: anywhere; }
+@media (max-width: 640px) { .row { grid-template-columns: 1fr; } .row .help, .row .err, .result { grid-column: 1; } }
+</style>
+<div class="settings">
+{{if .Saved}}
+  <div class="panel">
+    <h2>Settings</h2>
+    {{if .Changes}}
+    <p>Saved. Changed: {{range $i, $c := .Changes}}{{if $i}}, {{end}}<code>{{$c}}</code>{{end}}.</p>
+    {{if .Restarts}}<p id="restart" class="note">skycam is restarting to use them. This page reloads when it's back, in about 15 seconds.</p>
+    <script>
+    (function () {
+      var down = false, tries = 0, el = document.getElementById("restart");
+      var t = setInterval(function () {
+        if (++tries > 60) { clearInterval(t); el.textContent = "skycam hasn't come back after two minutes. Check it with: sudo systemctl status skycam"; return; }
+        fetch("/health", {cache: "no-store"}).then(function (r) {
+          if (r.ok && down) { clearInterval(t); location.href = "/settings"; }
+        }).catch(function () { down = true; });
+      }, 2000);
+    })();
+    </script>{{end}}
+    {{else}}<p>Nothing changed.</p>{{end}}
+    <p><a href="/settings">Back to settings</a></p>
+  </div>
+{{else}}
+  {{if .SettingsErr}}<div class="panel alert"><h2>Saved settings ignored</h2><p>skycam started with config.json alone because the saved settings were bad: {{.SettingsErr}}</p><p class="note">Save the page or reset to replace them.</p></div>{{end}}
+  {{if .Problem}}<div class="panel alert"><h2>Not saved</h2><p>{{.Problem}}</p></div>{{end}}
+  <form method="post" action="/settings">
+  {{range .Groups}}
+    <section class="panel">
+      <h2>{{.Title}}</h2>
+      {{range .Fields}}
+      <div class="row{{if .Changed}} changed{{end}}{{if .Error}} bad{{end}}">
+        <label for="{{.ID}}">{{.Label}}</label>
+        <div class="control">
+          {{if eq .Kind "bool"}}<input type="checkbox" id="{{.ID}}" name="{{.Key}}"{{if .On}} checked{{end}} data-default="{{.DefOn}}">
+          {{else if .Options}}<select id="{{.ID}}" name="{{.Key}}" data-default="{{.Default}}">{{$v := .Value}}{{range .Options}}<option value="{{.Value}}"{{if eq .Value $v}} selected{{end}}>{{.Label}}</option>{{end}}</select>
+          {{else if eq .Kind "rects"}}<textarea id="{{.ID}}" name="{{.Key}}" rows="3" spellcheck="false" data-default="{{.Default}}">{{.Value}}</textarea>
+          {{else}}<input type="text" id="{{.ID}}" name="{{.Key}}" value="{{.Value}}" spellcheck="false" autocomplete="off"{{if or (eq .Kind "int") (eq .Kind "float")}} inputmode="decimal"{{end}} data-default="{{.Default}}">{{end}}
+          {{if .Check}}<button type="button" class="small" hx-post="/settings/check" hx-vals='{"source": "{{.Check}}"}' hx-target="#{{.ID}}-result">Check</button>{{end}}
+          <span class="def">{{if .Changed}}<button type="button" class="small" data-reset="{{.ID}}" title="Default: {{.Default}}">Use default</button>{{else}}default{{end}}</span>
+        </div>
+        {{if .Error}}<div class="err">{{.Error}}</div>{{end}}
+        {{if .Help}}<div class="help">{{.Help}}{{if .Changed}} Default: {{.Default}}.{{end}}</div>{{else if .Changed}}<div class="help">Default: {{.Default}}.</div>{{end}}
+        {{if .Check}}<div class="result" id="{{.ID}}-result" aria-live="polite"></div>{{end}}
+      </div>
+      {{end}}
+    </section>
+  {{end}}
+    <div class="bar">
+      <span class="note">{{if .Changed}}{{.Changed}} setting{{if ne .Changed 1}}s{{end}} differ from config.json (marked •).{{else}}Everything matches config.json.{{end}} Saving restarts skycam, which takes about 15 seconds.</span>
+      <button type="submit" class="btn">Save and restart</button>
+    </div>
+  </form>
+  <form method="post" action="/settings/reset" class="bar" onsubmit="return confirm('Put every setting back to config.json and restart skycam?')">
+    <span class="note">Saved in {{.Path}}.</span>
+    <button type="submit" class="small">Reset all to config.json</button>
+  </form>
+  <section class="panel locked" style="margin-top:16px">
+    <h2>Set in config.json only</h2>
+    <p class="note">Passwords, keys, paths, listeners and skyq's band. Change them in /etc/skycam/config.json, then run <code>sudo systemctl restart skycam</code>.</p>
+    <dl>{{range .Locked}}<dt>{{.Key}}</dt><dd>{{if .Value}}{{.Value}}{{else}}<span class="muted">empty</span>{{end}}</dd>{{end}}</dl>
+  </section>
+  <script>
+  document.addEventListener("click", function (e) {
+    var id = e.target.getAttribute && e.target.getAttribute("data-reset");
+    if (!id) return;
+    var el = document.getElementById(id);
+    if (el.type === "checkbox") el.checked = el.dataset.default === "true";
+    else el.value = el.dataset.default;
+    e.target.textContent = "Default set; save to apply";
+    e.target.disabled = true;
+  });
+  </script>
+{{end}}
+</div>{{end}}

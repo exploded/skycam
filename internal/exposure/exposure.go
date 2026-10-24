@@ -22,16 +22,17 @@ type Limits struct {
 	MinGain     int
 	MaxGain     int
 	Target      float64 // mean brightness, 0–255
+	// Deadband: within this fraction of the target, leave the settings
+	// alone so the timelapse doesn't flicker. Zero means 10%.
+	Deadband float64
 }
 
 const (
 	// Damping < 1 moves part of the way each frame, so a passing car's
 	// headlights or a satellite flare doesn't swing the next frame.
-	damping = 0.8
-	maxStep = 4.0
-	// deadband: within ±10% of the target, leave the settings alone so the
-	// timelapse doesn't flicker.
-	deadband = 0.10
+	damping         = 0.8
+	maxStep         = 4.0
+	defaultDeadband = 0.10
 	// saturatedFrac above which the frame is treated as blown out.
 	saturatedFrac = 0.05
 )
@@ -47,6 +48,10 @@ func Next(last camera.Settings, mean, saturated float64, lim Limits) camera.Sett
 	if saturated > saturatedFrac {
 		// The mean under-reports a clipped frame; come down hard.
 		ratio = min(ratio, 0.25)
+	}
+	deadband := lim.Deadband
+	if deadband <= 0 {
+		deadband = defaultDeadband
 	}
 	step := 1.0
 	if math.Abs(ratio-1) > deadband {

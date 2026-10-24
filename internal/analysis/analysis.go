@@ -298,26 +298,30 @@ func FindStars(img *image.Gray, region image.Rectangle, bg *Background, o StarOp
 
 // HotMap learns pixels that fire in most frames. Stars drift across the
 // sensor; a hot pixel stays put. Each frame's detections update a decaying
-// rate per pixel; a pixel above half is masked.
+// rate per pixel; a pixel above Threshold is masked.
 type HotMap struct {
 	w, h int
 	rate []float32
+	// Decay is how much of the rate carries to the next frame; 0.95
+	// remembers about 20 frames.
+	Decay     float32
+	Threshold float32
 }
 
-func NewHotMap(w, h int) *HotMap { return &HotMap{w: w, h: h, rate: make([]float32, w*h)} }
-
-const hotDecay = 0.95
+func NewHotMap(w, h int) *HotMap {
+	return &HotMap{w: w, h: h, rate: make([]float32, w*h), Decay: 0.95, Threshold: 0.5}
+}
 
 // Update decays every pixel's rate and bumps the detected ones. Stars are
 // tested before the update, so a frame's own detections never mask
 // themselves.
 func (m *HotMap) Update(stars []Star) {
 	for i := range m.rate {
-		m.rate[i] *= hotDecay
+		m.rate[i] *= m.Decay
 	}
 	for _, s := range stars {
 		if s.X >= 0 && s.Y >= 0 && s.X < m.w && s.Y < m.h {
-			m.rate[s.Y*m.w+s.X] += 1 - hotDecay
+			m.rate[s.Y*m.w+s.X] += 1 - m.Decay
 		}
 	}
 }
@@ -326,7 +330,7 @@ func (m *HotMap) IsHot(x, y int) bool {
 	if x < 0 || y < 0 || x >= m.w || y >= m.h {
 		return false
 	}
-	return m.rate[y*m.w+x] > 0.5
+	return m.rate[y*m.w+x] > m.Threshold
 }
 
 // SkyMag converts the sky level to a relative magnitude per pixel: the
@@ -350,12 +354,19 @@ func CloudCover(stars int, clearStars float64) float64 {
 	return min(max(1-float64(stars)/clearStars, 0), 1)
 }
 
+// DarkSunAlt is the sun altitude below which the sky is dark enough to
+// estimate cloud. Capture, the Alpaca device and the report share it.
+const DarkSunAlt = -12.0
+
+// ClearBelow is the cloud cover under which a frame counts as clear.
+const ClearBelow = 0.3
+
 // Sky classifies cloud cover for display.
 func Sky(cover float64) string {
 	switch {
 	case math.IsNaN(cover):
 		return "unknown"
-	case cover < 0.3:
+	case cover < ClearBelow:
 		return "clear"
 	case cover < 0.7:
 		return "partly cloudy"

@@ -58,13 +58,19 @@ func main() {
 		cmd = "run"
 	}
 
-	cfg, err := config.Load(*cfgPath)
+	base, err := config.Load(*cfgPath)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "config:", err)
 		os.Exit(2)
 	}
+	// The settings page's changes, over config.json. A bad file is ignored
+	// so the camera still runs.
+	cfg, serr := config.WithSettings(base)
 	log, shutdownLog := logger(cfg)
 	defer shutdownLog()
+	if serr != nil {
+		log.Warn("settings", "err", serr)
+	}
 
 	loc, err := cfg.Location()
 	if err != nil {
@@ -80,6 +86,10 @@ func main() {
 		os.Exit(1)
 	}
 	defer app.close()
+	app.base = base
+	if serr != nil {
+		app.settingsErr = serr.Error()
+	}
 
 	switch cmd {
 	case "run":
@@ -127,16 +137,19 @@ func logger(cfg config.Config) (*slog.Logger, func()) {
 }
 
 type app struct {
-	cfg     config.Config
-	loc     *time.Location
-	log     *slog.Logger
-	sqlDB   interface{ Close() error }
-	q       *db.Queries
-	hub     *capture.Hub
-	overlay *overlay.Renderer
-	proc    *night.Processor
-	up      *upload.Uploader
-	bg      sync.WaitGroup
+	cfg  config.Config
+	base config.Config // config.json alone, without the settings page's changes
+	// settingsErr says why settings.json was ignored, for the settings page.
+	settingsErr string
+	loc         *time.Location
+	log         *slog.Logger
+	sqlDB       interface{ Close() error }
+	q           *db.Queries
+	hub         *capture.Hub
+	overlay     *overlay.Renderer
+	proc        *night.Processor
+	up          *upload.Uploader
+	bg          sync.WaitGroup
 }
 
 func newApp(ctx context.Context, cfg config.Config, loc *time.Location, log *slog.Logger) (*app, error) {
@@ -195,7 +208,12 @@ func (a *app) openCamera() (camera.Camera, error) {
 	return nil, fmt.Errorf("unknown camera driver %q", c.Driver)
 }
 
+// run captures and serves until ctx ends, or until the settings page asks
+// for a restart: then it stops capture and the web server, lets night
+// processing finish, and returns so systemd starts skycam again.
 func (a *app) run(ctx context.Context) error {
+	capCtx, restart := context.WithCancel(ctx)
+	defer restart()
 	cam, err := a.openCamera()
 	if err != nil {
 		return fmt.Errorf("opening camera: %w", err)
@@ -213,20 +231,24 @@ func (a *app) run(ctx context.Context) error {
 	o := a.cfg.Observatory
 	if o.RoofURL != "" || o.RainURL != "" || o.NINAURL != "" {
 		p := &observatory.Poller{RoofURL: o.RoofURL, RainURL: o.RainURL, NINAURL: o.NINAURL,
-			Interval: o.PollInterval.D(), StaleAfter: o.StaleAfter.D(), Log: a.log}
-		go p.Run(ctx)
+			Interval: o.PollInterval.D(), StaleAfter: o.StaleAfter.D(), Timeout: o.Timeout.D(), Log: a.log}
+		go p.Run(capCtx)
 		obs = p
 	}
 
-	srv := &web.Server{Cfg: a.cfg, Loc: a.loc, Hub: a.hub, DB: a.q, Log: a.log, Camera: label}
+	srv := &web.Server{Cfg: a.cfg, Base: a.base, SettingsErr: a.settingsErr, Loc: a.loc, Hub: a.hub, DB: a.q, Log: a.log, Camera: label,
+		Restart: func() {
+			a.log.Info("restarting for new settings")
+			restart()
+		}}
 	h, err := srv.Handler()
 	if err != nil {
 		return err
 	}
 	errc := make(chan error, 2)
-	go func() { errc <- web.Serve(ctx, a.cfg.Listen, h, a.log) }()
-	go a.up.Run(ctx, a.hub)
-	a.startAlpaca(ctx)
+	go func() { errc <- web.Serve(capCtx, a.cfg.Listen, h, a.log) }()
+	go a.up.Run(capCtx, a.hub)
+	a.startAlpaca(capCtx)
 
 	// Products for any night the Pi missed at dawn.
 	active := ""
@@ -252,7 +274,7 @@ func (a *app) run(ctx context.Context) error {
 			}()
 		},
 	}
-	go func() { errc <- loop.Run(ctx) }()
+	go func() { errc <- loop.Run(capCtx) }()
 
 	err = <-errc
 	if errors.Is(err, context.Canceled) {
@@ -260,10 +282,10 @@ func (a *app) run(ctx context.Context) error {
 	}
 	// A replay that finished on its own leaves the web server up so the
 	// results can be looked at; anything else shuts down.
-	if err == nil && ctx.Err() == nil && a.cfg.Camera.Driver == "fake" {
+	if err == nil && capCtx.Err() == nil && a.cfg.Camera.Driver == "fake" {
 		a.log.Info("replay finished; still serving until interrupted")
 		a.wait()
-		<-ctx.Done()
+		<-capCtx.Done()
 		return nil
 	}
 	a.wait()

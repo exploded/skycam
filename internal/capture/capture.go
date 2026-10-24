@@ -125,8 +125,6 @@ type Loop struct {
 	liveBlocked time.Time
 }
 
-const maxFailures = 10
-
 // Run captures until ctx ends. It returns an error after repeated camera
 // failures so systemd can restart the service (and the USB device with it).
 func (l *Loop) Run(ctx context.Context) error {
@@ -136,7 +134,8 @@ func (l *Loop) Run(ctx context.Context) error {
 	}
 	info := l.Cam.Info()
 	l.hot = analysis.NewHotMap(info.Width, info.Height)
-	l.baseline = NewBaseline(l.Cfg.Analysis.ClearStars)
+	l.hot.Decay, l.hot.Threshold = float32(l.Cfg.Analysis.HotDecay), float32(l.Cfg.Analysis.HotThreshold)
+	l.baseline = NewBaseline(l.Cfg.Analysis)
 	if l.DB != nil {
 		l.seedBaseline(ctx)
 	}
@@ -165,7 +164,7 @@ func (l *Loop) Run(ctx context.Context) error {
 			}
 			failures++
 			l.Log.Warn("capture failed", "err", err, "failures", failures)
-			if failures >= maxFailures {
+			if failures >= max(l.Cfg.Camera.MaxFailures, 1) {
 				return fmt.Errorf("camera failed %d times in a row: %w", failures, err)
 			}
 			l.clock.Sleep(ctx, time.Duration(failures)*2*time.Second)
@@ -183,10 +182,14 @@ func (l *Loop) mode() config.Mode {
 	return l.Cfg.Exposure.Day
 }
 
-func limits(m config.Mode, info camera.Info) exposure.Limits {
+func (l *Loop) limits(m config.Mode) exposure.Limits {
+	return limits(m, l.Cam.Info(), l.Cfg.Exposure.Deadband)
+}
+
+func limits(m config.Mode, info camera.Info, deadband float64) exposure.Limits {
 	lim := exposure.Limits{
 		MinExposure: m.MinExposure.D(), MaxExposure: m.MaxExposure.D(),
-		MinGain: m.MinGain, MaxGain: m.MaxGain, Target: m.Target,
+		MinGain: m.MinGain, MaxGain: m.MaxGain, Target: m.Target, Deadband: deadband,
 	}
 	if info.MinExposure > 0 {
 		lim.MinExposure = max(lim.MinExposure, info.MinExposure)
@@ -205,7 +208,7 @@ func limits(m config.Mode, info camera.Info) exposure.Limits {
 // end-of-night hook at dawn.
 func (l *Loop) updateMode(now time.Time) {
 	night := astro.SunAltitude(now, l.Cfg.Latitude, l.Cfg.Longitude) < l.Cfg.Exposure.SunAngle
-	lim := limits(l.modeFor(night), l.Cam.Info())
+	lim := l.limits(l.modeFor(night))
 	switch {
 	case !l.started:
 		l.started = true
@@ -255,7 +258,7 @@ func (l *Loop) endNight() {
 func (l *Loop) still(ctx context.Context, now time.Time) error {
 	l.updateMode(now)
 	m := l.mode()
-	lim := limits(m, l.Cam.Info())
+	lim := l.limits(m)
 	f, err := l.Cam.Capture(ctx, l.settings)
 	if err != nil {
 		return err
@@ -302,12 +305,15 @@ func (l *Loop) process(f camera.Frame, save bool) (*Record, error) {
 	bg := analysis.EstimateBackground(g, sky)
 	rec.SkyLevel = bg.Median()
 	rec.SkyMag = analysis.SkyMag(rec.SkyLevel, cfg.Analysis.BlackLevel, f.Exposure.Seconds(), exposure.GainFactor(f.Gain), cfg.Analysis.SkyZeroPoint)
-	stars := analysis.FindStars(g, sky, bg, analysis.StarOptions{Sigma: cfg.Analysis.StarSigma, MinDelta: 4, Exclude: exclude, Hot: l.hot})
+	stars := analysis.FindStars(g, sky, bg, analysis.StarOptions{
+		Sigma: cfg.Analysis.StarSigma, MinDelta: cfg.Analysis.MinDelta, MaxArea: cfg.Analysis.MaxStarArea,
+		DarkFrac: cfg.Analysis.DarkFrac, Exclude: exclude, Hot: l.hot,
+	})
 	l.hot.Update(stars)
 	rec.Stars = len(stars)
 	// Cloud only means something with the roof known open and the sky
 	// properly dark. Anything else stays unknown — never "clear".
-	if l.night && rec.Obs.RoofOpen() && rec.SunAlt < -12 {
+	if l.night && rec.Obs.RoofOpen() && rec.SunAlt < analysis.DarkSunAlt {
 		l.baseline.Add(rec.Stars)
 		rec.Cloud = analysis.CloudCover(rec.Stars, l.baseline.Value())
 	}
@@ -386,7 +392,7 @@ func nanZero(v float64) float64 {
 
 func (l *Loop) seedBaseline(ctx context.Context) {
 	since := time.Now().AddDate(0, 0, -l.Cfg.RetentionNights).UnixMilli()
-	counts, err := l.DB.ClearSkyStars(ctx, db.ClearSkyStarsParams{TakenAt: since, Limit: baselineWindow})
+	counts, err := l.DB.ClearSkyStars(ctx, db.ClearSkyStarsParams{TakenAt: since, Limit: int64(l.baseline.window)})
 	if err != nil {
 		l.Log.Warn("reading star baseline", "err", err)
 		return
@@ -396,28 +402,28 @@ func (l *Loop) seedBaseline(ctx context.Context) {
 	}
 }
 
-// Baseline is the clear-sky star count: the 90th percentile of recent
-// dark, roof-open frames. Cloudy frames sit below it and don't drag it
-// down; a fixed value from config overrides it.
+// Baseline is the clear-sky star count: a high percentile (the 90th by
+// default) of recent dark, roof-open frames. Cloudy frames sit below it
+// and don't drag it down; a fixed value from config overrides it.
 type Baseline struct {
-	mu     sync.Mutex
-	fixed  int
-	recent []int
+	mu         sync.Mutex
+	fixed      int
+	window     int     // samples kept
+	min        int     // samples before the baseline is trusted
+	percentile float64 // 0–100
+	recent     []int
 }
 
-const (
-	baselineWindow = 2000 // about one long night of frames
-	baselineMin    = 30   // samples before the baseline is trusted
-)
-
-func NewBaseline(fixed int) *Baseline { return &Baseline{fixed: fixed} }
+func NewBaseline(a config.Analysis) *Baseline {
+	return &Baseline{fixed: a.ClearStars, window: max(a.BaselineWindow, 1), min: max(a.BaselineMin, 1), percentile: a.BaselinePercentile}
+}
 
 func (b *Baseline) Add(stars int) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.recent = append(b.recent, stars)
-	if len(b.recent) > baselineWindow {
-		b.recent = b.recent[len(b.recent)-baselineWindow:]
+	if len(b.recent) > b.window {
+		b.recent = b.recent[len(b.recent)-b.window:]
 	}
 }
 
@@ -428,12 +434,13 @@ func (b *Baseline) Value() float64 {
 	if b.fixed > 0 {
 		return float64(b.fixed)
 	}
-	if len(b.recent) < baselineMin {
+	if len(b.recent) < b.min {
 		return math.NaN()
 	}
 	s := append([]int(nil), b.recent...)
 	sort.Ints(s)
-	return float64(s[len(s)*9/10])
+	i := int(float64(len(s)) * b.percentile / 100)
+	return float64(s[min(max(i, 0), len(s)-1)])
 }
 
 // ensure the image dirs exist up front so the first save can't race the

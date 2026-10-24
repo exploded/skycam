@@ -145,7 +145,8 @@ func TestLoopReplaysANight(t *testing.T) {
 }
 
 func TestBaseline(t *testing.T) {
-	b := NewBaseline(0)
+	a := config.Default().Analysis
+	b := NewBaseline(a)
 	if !math.IsNaN(b.Value()) {
 		t.Fatal("baseline before any samples should be NaN")
 	}
@@ -158,7 +159,8 @@ func TestBaseline(t *testing.T) {
 	if v := b.Value(); v != 500 {
 		t.Errorf("baseline %v, want 500", v)
 	}
-	if v := NewBaseline(321).Value(); v != 321 {
+	a.ClearStars = 321
+	if v := NewBaseline(a).Value(); v != 321 {
 		t.Errorf("fixed baseline %v", v)
 	}
 }

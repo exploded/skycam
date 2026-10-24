@@ -9,16 +9,13 @@ import (
 	"math"
 	"time"
 
+	"github.com/exploded/skycam/internal/astro"
 	"github.com/exploded/skycam/internal/camera"
 	"github.com/exploded/skycam/internal/config"
 	"github.com/exploded/skycam/internal/exposure"
 	"github.com/exploded/skycam/internal/overlay"
 	"github.com/exploded/skycam/internal/store/db"
 )
-
-// liveBlockFor is how long live mode stays off after a night session hit
-// its cap.
-const liveBlockFor = 30 * time.Minute
 
 // runLive streams short exposures while anyone is watching. Stills stop
 // meanwhile, so at night the session is capped and logged as an event for
@@ -28,7 +25,7 @@ func (l *Loop) runLive(ctx context.Context) error {
 	now := time.Now()
 	l.updateMode(l.clock.Now())
 	m := l.mode()
-	lim := limits(m, info)
+	lim := l.limits(m)
 	lim.MaxExposure = min(lim.MaxExposure, l.Cfg.Live.MaxExposure.D())
 	lim.MinExposure = min(lim.MinExposure, lim.MaxExposure)
 	// Exposures are short, so let gain go as high as the camera allows.
@@ -69,7 +66,7 @@ func (l *Loop) runLive(ctx context.Context) error {
 		}
 		if l.night && now.Sub(l.liveStart(now)) > l.Cfg.Live.NightLimit.D() {
 			l.Log.Info("live view hit its night limit; stills resume", "limit", l.Cfg.Live.NightLimit.D())
-			l.liveBlocked = now.Add(liveBlockFor)
+			l.liveBlocked = now.Add(l.Cfg.Live.BlockFor.D())
 			return nil
 		}
 		f, err := l.Cam.VideoFrame(ctx)
@@ -144,7 +141,7 @@ func (l *Loop) lastNightOr(now time.Time) string {
 	if l.lastNight != "" {
 		return l.lastNight
 	}
-	return now.In(l.Loc).Add(-12 * time.Hour).Format("20060102")
+	return astro.NightDate(now, l.Loc)
 }
 
 func (l *Loop) liveJPEG(f camera.Frame) []byte {
@@ -160,10 +157,10 @@ func (l *Loop) liveJPEG(f camera.Frame) []byte {
 			}
 		}
 		rgba := l.Overlay.Draw(f.Image, txt)
-		jpeg.Encode(&buf, rgba, &jpeg.Options{Quality: 75})
+		jpeg.Encode(&buf, rgba, &jpeg.Options{Quality: l.Cfg.Live.JPEGQuality})
 		return buf.Bytes()
 	}
-	jpeg.Encode(&buf, f.Image, &jpeg.Options{Quality: 75})
+	jpeg.Encode(&buf, f.Image, &jpeg.Options{Quality: l.Cfg.Live.JPEGQuality})
 	return buf.Bytes()
 }
 

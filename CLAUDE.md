@@ -19,7 +19,9 @@ from: phases M0–M6 (M5 native USB driver and M6 meteors are not built).
   retention, catch-up
 - `internal/report` — self-contained HTML report; `svg.go` and `report.css`
   are copied from skyq and must stay in step with skyq's `design/CHARTS.md`
-- `internal/web` — the Pi UI and sky API; `internal/relay` — the relay
+- `internal/web` — the Pi UI and sky API; `internal/relay` — the relay.
+  `/settings` (settings.go) edits the config with no login, home network
+  only (`localOnly`: private client, local Host name, same Origin)
 - `internal/alpaca` — ObservingConditions device and discovery responder
 - `internal/owm` — OpenWeatherMap poller for the device's ambient sensors.
   The request URL carries the API key, so errors must never quote it.
@@ -64,6 +66,12 @@ from: phases M0–M6 (M5 native USB driver and M6 meteors are not built).
   metering again. Metering stale frames made live view swing between too
   bright and too dark.
 - `Loop.NightEnded` runs on the capture goroutine and must return at once.
+- Settings are config.json with `<data_dir>/settings.json` over it
+  (`config.WithSettings`). The page saves only keys that differ, then
+  `Server.Restart` ends capture and systemd starts skycam again. A new config
+  field must go on the page (`settingsGroups`) or in `config.Locked`;
+  `TestSettingsCoverConfig` fails otherwise. Secrets, paths, listeners and
+  skyq's band are locked.
 
 ## Workflow
 

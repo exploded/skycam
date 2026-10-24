@@ -36,10 +36,18 @@ var staticFS embed.FS
 
 type Server struct {
 	Cfg config.Config
-	Loc *time.Location
-	Hub *capture.Hub
-	DB  *db.Queries // may be nil
-	Log *slog.Logger
+	// Base is config.json without the settings page's changes; the page
+	// shows it as each setting's default.
+	Base config.Config
+	// Restart, if set, makes skycam exit so systemd starts it with saved
+	// settings.
+	Restart func()
+	// SettingsErr says why settings.json was ignored at start-up, if it was.
+	SettingsErr string
+	Loc         *time.Location
+	Hub         *capture.Hub
+	DB          *db.Queries // may be nil
+	Log         *slog.Logger
 	// Camera is the name shown on the pages.
 	Camera string
 
@@ -92,6 +100,11 @@ func (s *Server) Handler() (http.Handler, error) {
 	mux.Handle("GET /images/", s.basicAuth(images))
 	mux.Handle("GET /api/nights/{night}/sky", s.basicAuth(http.HandlerFunc(s.skyNight)))
 	mux.Handle("GET /images", http.RedirectHandler("/images/", http.StatusMovedPermanently))
+
+	mux.Handle("GET /settings", localOnly(http.HandlerFunc(s.settingsPage)))
+	mux.Handle("POST /settings", localOnly(http.HandlerFunc(s.saveSettings)))
+	mux.Handle("POST /settings/reset", localOnly(http.HandlerFunc(s.resetSettings)))
+	mux.Handle("POST /settings/check", localOnly(http.HandlerFunc(s.checkSource)))
 	return s.logRequests(mux), nil
 }
 
@@ -101,7 +114,7 @@ func (s *Server) parse() error {
 		return err
 	}
 	s.pages = map[string]*template.Template{}
-	for _, p := range []string{"dashboard", "live", "nights"} {
+	for _, p := range []string{"dashboard", "live", "nights", "settings"} {
 		c, err := base.Clone()
 		if err != nil {
 			return err
@@ -246,7 +259,8 @@ func (s *Server) nights(w http.ResponseWriter, r *http.Request) {
 	var rows []nightRow
 	seen := map[string]bool{}
 	if s.DB != nil {
-		ns, err := s.DB.ListNights(r.Context(), 400)
+		// Every night retention keeps, however long that is.
+		ns, err := s.DB.ListNights(r.Context(), int64(max(400, s.Cfg.ProductDays+1)))
 		if err != nil {
 			s.Log.Warn("listing nights", "err", err)
 		}

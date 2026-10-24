@@ -8,8 +8,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"image"
+	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
+	"slices"
 	"strings"
 	"time"
 )
@@ -60,6 +63,10 @@ type Camera struct {
 
 	FakeDir      string `json:"fake_dir"`      // folder of JPEGs to replay
 	FakeRealtime bool   `json:"fake_realtime"` // sleep for each exposure
+
+	// MaxFailures is how many captures may fail in a row before skycam
+	// exits, so systemd restarts it and reopens the USB device.
+	MaxFailures int `json:"max_failures"`
 }
 
 // Mode is the exposure envelope for day or night.
@@ -83,6 +90,9 @@ type Exposure struct {
 	// text, the telescope and anything else that is not sky or roof.
 	Meter   Rect   `json:"meter"`
 	Exclude []Rect `json:"exclude"`
+	// Deadband is how far, as a fraction, the brightness may stray from the
+	// target before the settings change, so the timelapse doesn't flicker.
+	Deadband float64 `json:"deadband"`
 }
 
 type Overlay struct {
@@ -99,6 +109,7 @@ type Observatory struct {
 	PollInterval Duration `json:"poll_interval"`
 	// StaleAfter is how old a reading may be before it reads unknown.
 	StaleAfter Duration `json:"stale_after"`
+	Timeout    Duration `json:"timeout"` // per request
 }
 
 type Analysis struct {
@@ -119,6 +130,26 @@ type Analysis struct {
 	// sky with the roof open.
 	SQMOffset float64 `json:"sqm_offset"`
 	Sky       Rect    `json:"sky"` // region used for stars and sky brightness
+
+	// MinDelta is a floor on the star threshold in ADU, so JPEG ringing on
+	// a flat frame doesn't count.
+	MinDelta float64 `json:"min_delta"`
+	// MaxStarArea is the biggest blob, in pixels of a 7×7 box, that counts
+	// as a star; bigger is a light, the moon or a roof edge.
+	MaxStarArea int `json:"max_star_area"`
+	// DarkFrac skips background blocks below this fraction of the sky
+	// level: the telescope, roof edge and trees.
+	DarkFrac float64 `json:"dark_frac"`
+	// HotDecay is how much of a pixel's detection rate carries to the next
+	// frame (0.95 remembers about 20 frames); above HotThreshold it is hot.
+	HotDecay     float64 `json:"hot_decay"`
+	HotThreshold float64 `json:"hot_threshold"`
+	// The clear-sky baseline is the BaselinePercentile of the last
+	// BaselineWindow dark, roof-open star counts, once there are
+	// BaselineMin of them.
+	BaselineWindow     int     `json:"baseline_window"`
+	BaselineMin        int     `json:"baseline_min"`
+	BaselinePercentile float64 `json:"baseline_percentile"`
 }
 
 type Timelapse struct {
@@ -127,6 +158,21 @@ type Timelapse struct {
 	Codec   string `json:"codec"` // libx264 or h264_v4l2m2m
 	CRF     int    `json:"crf"`
 	FFmpeg  string `json:"ffmpeg"`
+	Preset  string `json:"preset"`  // libx264 -preset
+	Bitrate string `json:"bitrate"` // h264_v4l2m2m -b:v, e.g. "8M"
+}
+
+// Products tunes the keogram, startrails and thumbnail made at dawn.
+type Products struct {
+	// Frames brighter than StartrailsMaxMean (0–255) are left out of the
+	// startrails; fewer than StartrailsMinFrames dark frames makes none.
+	StartrailsMaxMean   float64 `json:"startrails_max_mean"`
+	StartrailsMinFrames int     `json:"startrails_min_frames"`
+	// KeogramColumn is where the keogram slice is taken, as a fraction of
+	// the width; 0.5 is the centre.
+	KeogramColumn   float64 `json:"keogram_column"`
+	KeogramMinWidth int     `json:"keogram_min_width"`
+	JPEGQuality     int     `json:"jpeg_quality"`
 }
 
 type S3 struct {
@@ -142,11 +188,12 @@ type S3 struct {
 }
 
 type Relay struct {
-	URL       string   `json:"url"` // https://skycam.mchugh.au
-	Token     string   `json:"token"`
-	Every     Duration `json:"every"`      // still upload cadence
-	LiveFPS   float64  `json:"live_fps"`   //
-	LiveWidth int      `json:"live_width"` // live frames are scaled to this width
+	URL         string   `json:"url"` // https://skycam.mchugh.au
+	Token       string   `json:"token"`
+	Every       Duration `json:"every"`        // still upload cadence
+	LiveFPS     float64  `json:"live_fps"`     //
+	LiveWidth   int      `json:"live_width"`   // live frames are scaled to this width
+	LiveQuality int      `json:"live_quality"` // JPEG quality of those frames
 }
 
 // Alpaca serves the camera as an ASCOM Alpaca ObservingConditions device,
@@ -172,6 +219,10 @@ type Live struct {
 	// IdleStop ends live mode this long after the last viewer left.
 	IdleStop    Duration `json:"idle_stop"`
 	MaxExposure Duration `json:"max_exposure"`
+	// BlockFor keeps live mode off this long after a night session hit its
+	// limit, so a forgotten tab can't hold the stills off.
+	BlockFor    Duration `json:"block_for"`
+	JPEGQuality int      `json:"jpeg_quality"`
 }
 
 type Config struct {
@@ -197,6 +248,7 @@ type Config struct {
 	Observatory Observatory    `json:"observatory"`
 	Analysis    Analysis       `json:"analysis"`
 	Timelapse   Timelapse      `json:"timelapse"`
+	Products    Products       `json:"products"`
 	Live        Live           `json:"live"`
 	S3          S3             `json:"s3"`
 	Relay       Relay          `json:"relay"`
@@ -222,9 +274,10 @@ func Default() Config {
 		ProductDays:     365,
 
 		Camera: Camera{
-			Driver:    "sdk",
-			SDKPath:   "/usr/local/lib/libASICamera2.so",
-			Bandwidth: 40,
+			Driver:      "sdk",
+			SDKPath:     "/usr/local/lib/libASICamera2.so",
+			Bandwidth:   40,
+			MaxFailures: 10,
 		},
 		Exposure: Exposure{
 			SunAngle: -6,
@@ -251,6 +304,7 @@ func Default() Config {
 				{0, 0, 0.3, 0.15}, // allsky-style text block
 				{0, 0.88, 0.5, 1}, // observatory lines
 			},
+			Deadband: 0.10,
 		},
 		Overlay: Overlay{Enabled: true, Observatory: true},
 		Observatory: Observatory{
@@ -259,6 +313,7 @@ func Default() Config {
 			NINAURL:      "http://192.168.1.144:1888",
 			PollInterval: Duration(10 * time.Second),
 			StaleAfter:   Duration(60 * time.Second),
+			Timeout:      Duration(4 * time.Second),
 		},
 		Analysis: Analysis{
 			BandTop:      0.06,
@@ -267,12 +322,24 @@ func Default() Config {
 			SkyZeroPoint: 20,
 			SQMOffset:    0.6,
 			Sky:          Rect{0, 0.15, 1, 0.85},
+			MinDelta:     4,
+			MaxStarArea:  20,
+			DarkFrac:     0.6,
+			HotDecay:     0.95,
+			HotThreshold: 0.5,
+			// About one long night of frames.
+			BaselineWindow:     2000,
+			BaselineMin:        30,
+			BaselinePercentile: 90,
 		},
-		Timelapse: Timelapse{Enabled: true, FPS: 25, Codec: "libx264", CRF: 23, FFmpeg: "ffmpeg"},
+		Timelapse: Timelapse{Enabled: true, FPS: 25, Codec: "libx264", CRF: 23, FFmpeg: "ffmpeg", Preset: "veryfast", Bitrate: "8M"},
+		Products:  Products{StartrailsMaxMean: 90, StartrailsMinFrames: 10, KeogramColumn: 0.5, KeogramMinWidth: 1280, JPEGQuality: 90},
 		Live: Live{
 			NightLimit:  Duration(10 * time.Minute),
 			IdleStop:    Duration(60 * time.Second),
 			MaxExposure: Duration(500 * time.Millisecond),
+			BlockFor:    Duration(30 * time.Minute),
+			JPEGQuality: 75,
 		},
 		// allsky's bucket and layout; the allsky-uploader IAM user can write
 		// under allsky/ and the bucket policy makes it public.
@@ -283,9 +350,10 @@ func Default() Config {
 			LatestEvery: Duration(5 * time.Minute),
 		},
 		Relay: Relay{
-			Every:     Duration(30 * time.Second),
-			LiveFPS:   2,
-			LiveWidth: 960,
+			Every:       Duration(30 * time.Second),
+			LiveFPS:     2,
+			LiveWidth:   960,
+			LiveQuality: 70,
 		},
 		Alpaca:  Alpaca{Listen: ":11111", Discovery: true, MaxAge: Duration(5 * time.Minute)},
 		Weather: OpenWeatherMap{Interval: Duration(10 * time.Minute), MaxAge: Duration(30 * time.Minute)},
@@ -308,6 +376,15 @@ func Load(path string) (Config, error) {
 		return cfg, fmt.Errorf("%s: %w", path, err)
 	}
 	return cfg, cfg.validate()
+}
+
+// X264Presets are libx264's -preset values, fastest first.
+var X264Presets = []string{"ultrafast", "superfast", "veryfast", "faster", "fast", "medium", "slow", "slower", "veryslow"}
+
+var reBitrate = regexp.MustCompile(`^[1-9][0-9]*[kKM]?$`)
+
+func (r Rect) valid() bool {
+	return r.X0 >= 0 && r.Y0 >= 0 && r.X1 <= 1 && r.Y1 <= 1 && r.X0 < r.X1 && r.Y0 < r.Y1
 }
 
 func (c Config) validate() error {
@@ -340,7 +417,76 @@ func (c Config) validate() error {
 	if c.Relay.URL != "" && c.Relay.Token == "" {
 		errs = append(errs, "relay: token is required when url is set")
 	}
+	if c.Latitude < -90 || c.Latitude > 90 || c.Longitude < -180 || c.Longitude > 180 {
+		errs = append(errs, "latitude must be within ±90 and longitude within ±180")
+	}
+	if _, err := c.Location(); err != nil {
+		errs = append(errs, fmt.Sprintf("timezone %q: %v", c.Timezone, err))
+	}
+	for name, q := range map[string]int{"jpeg_quality": c.JPEGQuality, "live.jpeg_quality": c.Live.JPEGQuality,
+		"relay.live_quality": c.Relay.LiveQuality, "products.jpeg_quality": c.Products.JPEGQuality} {
+		if q < 1 || q > 100 {
+			errs = append(errs, name+" must be 1-100")
+		}
+	}
+	for name, f := range map[string]float64{"exposure.deadband": c.Exposure.Deadband, "analysis.dark_frac": c.Analysis.DarkFrac,
+		"analysis.hot_decay": c.Analysis.HotDecay, "analysis.hot_threshold": c.Analysis.HotThreshold,
+		"products.keogram_column": c.Products.KeogramColumn} {
+		if f < 0 || f > 1 {
+			errs = append(errs, name+" must be between 0 and 1")
+		}
+	}
+	for name, r := range map[string]Rect{"exposure.meter": c.Exposure.Meter, "analysis.sky": c.Analysis.Sky} {
+		if !r.valid() {
+			errs = append(errs, name+": need 0 <= x0 < x1 <= 1 and 0 <= y0 < y1 <= 1")
+		}
+	}
+	for i, r := range c.Exposure.Exclude {
+		if !r.valid() {
+			errs = append(errs, fmt.Sprintf("exposure.exclude[%d]: need 0 <= x0 < x1 <= 1 and 0 <= y0 < y1 <= 1", i))
+		}
+	}
+	for name, n := range map[string]int{"camera.max_failures": c.Camera.MaxFailures, "analysis.max_star_area": c.Analysis.MaxStarArea,
+		"analysis.baseline_window": c.Analysis.BaselineWindow, "analysis.baseline_min": c.Analysis.BaselineMin,
+		"products.startrails_min_frames": c.Products.StartrailsMinFrames, "products.keogram_min_width": c.Products.KeogramMinWidth} {
+		if n < 1 {
+			errs = append(errs, name+" must be at least 1")
+		}
+	}
+	if p := c.Analysis.BaselinePercentile; p <= 0 || p > 100 {
+		errs = append(errs, "analysis.baseline_percentile must be above 0 and at most 100")
+	}
+	for name, d := range map[string]Duration{"observatory.poll_interval": c.Observatory.PollInterval,
+		"observatory.timeout": c.Observatory.Timeout, "relay.every": c.Relay.Every} {
+		if d <= 0 {
+			errs = append(errs, name+" must be positive")
+		}
+	}
+	// The ESP32s answer status.json on port 80; 11111 is N.I.N.A.'s Alpaca.
+	for name, u := range map[string]string{"observatory.roof_url": c.Observatory.RoofURL, "observatory.rain_url": c.Observatory.RainURL,
+		"observatory.nina_url": c.Observatory.NINAURL} {
+		if u == "" {
+			continue
+		}
+		pu, err := url.Parse(u)
+		switch {
+		case err != nil || (pu.Scheme != "http" && pu.Scheme != "https") || pu.Host == "":
+			errs = append(errs, name+": want an http:// URL")
+		case name != "observatory.nina_url" && pu.Port() == "11111":
+			errs = append(errs, name+": the device is read on port 80, not Alpaca's 11111")
+		}
+	}
+	if c.Timelapse.Codec != "libx264" && c.Timelapse.Codec != "h264_v4l2m2m" {
+		errs = append(errs, fmt.Sprintf("timelapse.codec %q: want libx264 or h264_v4l2m2m", c.Timelapse.Codec))
+	}
+	if !slices.Contains(X264Presets, c.Timelapse.Preset) {
+		errs = append(errs, fmt.Sprintf("timelapse.preset %q: want one of %s", c.Timelapse.Preset, strings.Join(X264Presets, ", ")))
+	}
+	if !reBitrate.MatchString(c.Timelapse.Bitrate) {
+		errs = append(errs, fmt.Sprintf("timelapse.bitrate %q: want a number with an optional k or M, e.g. 8M", c.Timelapse.Bitrate))
+	}
 	if len(errs) > 0 {
+		slices.Sort(errs) // several checks walk maps
 		return fmt.Errorf("config: %s", strings.Join(errs, "; "))
 	}
 	return nil
