@@ -26,7 +26,7 @@ type skyNightJSON struct {
 
 type skyFrameJSON struct {
 	Time      time.Time `json:"time"`  // exposure start, observatory zone
-	Image     string    `json:"image"` // path under /images/, "" if not kept
+	Image     string    `json:"image"` // path under /images/, "" if not kept; 404 once retention deletes it (14 nights)
 	ExposureS float64   `json:"exposure_s"`
 	Gain      int64     `json:"gain"`
 	Stars     int64     `json:"stars"`
@@ -36,7 +36,7 @@ type skyFrameJSON struct {
 	SunAlt    float64   `json:"sun_alt"`
 	MoonAlt   float64   `json:"moon_alt"`
 	MoonIllum float64   `json:"moon_illum"`
-	Roof      string    `json:"roof"` // OPEN, CLOSED, MOVING, ERROR or unknown
+	Roof      string    `json:"roof"` // OPEN, CLOSED, OPENING, CLOSING, ERROR or unknown
 	Rain      string    `json:"rain"` // SAFE, RAIN or unknown
 }
 
