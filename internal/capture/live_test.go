@@ -1,10 +1,16 @@
 package capture
 
 import (
+	"context"
+	"image"
+	"io"
+	"log/slog"
+	"math"
 	"testing"
 	"time"
 
 	"github.com/exploded/skycam/internal/camera"
+	"github.com/exploded/skycam/internal/config"
 	"github.com/exploded/skycam/internal/exposure"
 )
 
@@ -83,6 +89,56 @@ func TestLiveExposureSettles(t *testing.T) {
 				}
 			}
 		}
+	}
+}
+
+// evenScene is a camera looking at a uniform scene: every pixel is scene ×
+// exposure × linear gain, clipped at 255.
+type evenScene struct {
+	scene float64
+	video camera.Settings
+}
+
+func (c *evenScene) Info() camera.Info {
+	return camera.Info{Width: 64, Height: 48, MinExposure: 32 * time.Microsecond, MaxExposure: time.Hour, MaxGain: 100}
+}
+
+func (c *evenScene) frame(s camera.Settings) camera.Frame {
+	g := image.NewGray(image.Rect(0, 0, 64, 48))
+	v := uint8(min(255, math.Round(c.scene*totalLight(s))))
+	for i := range g.Pix {
+		g.Pix[i] = v
+	}
+	return camera.Frame{Image: g, Start: time.Now(), Exposure: s.Exposure, Gain: s.Gain, TempC: camera.NoTemp}
+}
+
+func (c *evenScene) Capture(ctx context.Context, s camera.Settings) (camera.Frame, error) {
+	return c.frame(s), nil
+}
+func (c *evenScene) StartVideo(s camera.Settings) error { c.video = s; return nil }
+func (c *evenScene) SetVideo(s camera.Settings) error   { c.video = s; return nil }
+func (c *evenScene) VideoFrame(ctx context.Context) (camera.Frame, error) {
+	return c.frame(c.video), nil
+}
+func (c *evenScene) StopVideo() error { return nil }
+func (c *evenScene) Close() error     { return nil }
+
+func TestLiveHandsExposureToStills(t *testing.T) {
+	// The loop starts at either the night maximum (blown out here) or the
+	// day mid-range (far too dark). Live view meters its way to the right
+	// setting; the next still must start from that, not the old one.
+	cfg := config.Default()
+	cfg.Live.IdleStop = config.Duration(300 * time.Millisecond)
+	cam := &evenScene{scene: 700}
+	l := &Loop{Cfg: cfg, Loc: time.UTC, Cam: cam, Hub: NewHub(),
+		Log: slog.New(slog.NewTextHandler(io.Discard, nil)), clock: wallClock{}}
+	l.Hub.Demand()
+	if err := l.runLive(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	target := l.mode().Target
+	if got := cam.frame(l.settings).Image.Pix[0]; math.Abs(float64(got)-target) > target*0.15 {
+		t.Errorf("%s still after live: %v gives mean %d, want about %v", modeName(l.night), l.settings, got, target)
 	}
 }
 

@@ -25,7 +25,8 @@ func (l *Loop) runLive(ctx context.Context) error {
 	now := time.Now()
 	l.updateMode(l.clock.Now())
 	m := l.mode()
-	lim := l.limits(m)
+	stillLim := l.limits(m)
+	lim := stillLim
 	lim.MaxExposure = min(lim.MaxExposure, l.Cfg.Live.MaxExposure.D())
 	lim.MinExposure = min(lim.MinExposure, lim.MaxExposure)
 	// Exposures are short, so let gain go as high as the camera allows.
@@ -56,6 +57,10 @@ func (l *Loop) runLive(ctx context.Context) error {
 	gap := time.Duration(float64(time.Second) / fps)
 	var lastPub time.Time
 	ae := liveExposure{s: s}
+	// Stills pause while live runs, so hand back what live metering
+	// learnt. Otherwise the first still after a session uses the setting
+	// from before it, however much the light changed meanwhile.
+	defer func() { l.settings = exposure.Clamp(ae.s, stillLim) }()
 	for {
 		if ctx.Err() != nil {
 			return nil
