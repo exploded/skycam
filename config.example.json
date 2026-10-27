@@ -6,7 +6,7 @@
   "data_dir": "/var/lib/skycam",
 
   "images_user": "skyq",
-  "images_password": "CHANGE-ME (also skyq's allsky_password)",
+  "images_password": "CHANGE-ME (also skyq's skycam_password)",
 
   "jpeg_quality": 90,
   "retention_nights": 14,

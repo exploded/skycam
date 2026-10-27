@@ -14,7 +14,7 @@ import (
 
 // TestSweep runs the detector over a folder of real frames and logs the
 // numbers, for tuning. Set SKYCAM_FRAMES to a night folder copied from
-// allsky.local/images/<YYYYMMDD>/ and run with -v.
+// skycam.local/images/<YYYYMMDD>/ and run with -v.
 func TestSweep(t *testing.T) {
 	dir := os.Getenv("SKYCAM_FRAMES")
 	if dir == "" {

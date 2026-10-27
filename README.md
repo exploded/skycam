@@ -2,8 +2,10 @@
 
 skycam is the observatory's all-sky camera software. It replaces
 [allsky](https://github.com/AllskyTeam/allsky) on the Raspberry Pi 4 at
-allsky.local, which drives a ZWO ASI120MM Mini mounted inside the roll-off
-observatory.
+skycam.local, which drives a ZWO ASI120MM Mini mounted inside the roll-off
+observatory. The Pi was called `allsky` until 2026-10-27; "allsky" now
+means only the old software and the file layout and S3 bucket skycam kept
+from it.
 
 It does the following:
 
@@ -36,7 +38,7 @@ The `fake` camera driver replays a folder of allsky stills, so you can run the
 whole pipeline without the camera.
 
 1. Copy a night of stills into a folder, for example from
-   http://allsky.local/images/20261023/.
+   http://skycam.local/images/20261023/.
 2. Write a config that points at it:
 
    ```json
@@ -84,7 +86,7 @@ one frame about every 20 seconds.
 
 ### Settings page
 
-http://allsky.local/settings changes the rest of the settings without SSH.
+http://skycam.local/settings changes the rest of the settings without SSH.
 It has no login: it answers only devices on the home network, and the Pi has
 no port open to the internet.
 
@@ -108,18 +110,19 @@ no port open to the internet.
 The first deploy provisions the Pi, and later deploys update it.
 
 1. Flash Raspberry Pi OS Lite (64-bit) to a new SD card with Raspberry Pi
-   Imager. Set the hostname to `allsky` and enable SSH with your key.
-2. From this repo, run `.\scripts\pi\deploy-pi.ps1 -Target <user>@allsky.local`.
+   Imager. Set the hostname to `skycam` and enable SSH with your key.
+2. From this repo, run `.\scripts\pi\deploy-pi.ps1`. It deploys to
+   `james@skycam.local`; pass `-Target` for another user or address.
    The script builds `skycam` for arm64, copies it to the Pi with the ZWO SDK
    and udev rule, and runs [scripts/pi/setup.sh](scripts/pi/setup.sh).
 3. On the Pi, edit `/etc/skycam/config.json`. Set `latitude` and `longitude`
    to the observatory's, and the `observatory` URLs to the roof, rain sensor
    and N.I.N.A. addresses; the example's values are placeholders. Choose an
    `images_user` and `images_password`, then set the relay token and S3 keys.
-   Put the same pair in skyq's config as `allsky_username` and
-   `allsky_password`; skyq sends no credentials without them. Leave both empty
+   Put the same pair in skyq's config as `skycam_username` and
+   `skycam_password`; skyq sends no credentials without them. Leave both empty
    to turn the auth off.
-4. Run `sudo systemctl restart skycam`, then open http://allsky.local/.
+4. Run `sudo systemctl restart skycam`, then open http://skycam.local/.
 
 ## Deploy the relay
 

@@ -175,15 +175,15 @@ func TestSettingsLocalOnly(t *testing.T) {
 	}{
 		{"192.168.1.5:5000", "192.168.1.53", "", http.MethodGet, 200},
 		{"127.0.0.1:5000", "localhost:8999", "", http.MethodGet, 200},
-		{"[fd00::5]:5000", "allsky.local", "", http.MethodGet, 200},
+		{"[fd00::5]:5000", "skycam.local", "", http.MethodGet, 200},
 		{"[fe80::1]:5000", "allsky", "", http.MethodGet, 200},
 		{"8.8.8.8:5000", "192.168.1.53", "", http.MethodGet, 403},
-		{"[2001:db8:1:0:17da:7304:a7a9:f82a]:5000", "allsky.local", "", http.MethodGet, 200},
-		{"[2001:db8::1]:5000", "allsky.local", "", http.MethodGet, 403},
+		{"[2001:db8:1:0:17da:7304:a7a9:f82a]:5000", "skycam.local", "", http.MethodGet, 200},
+		{"[2001:db8::1]:5000", "skycam.local", "", http.MethodGet, 403},
 		// DNS rebinding: an outside name pointed at the Pi.
 		{"192.168.1.5:5000", "evil.example.com", "", http.MethodGet, 403},
 		// A page elsewhere posting to the Pi.
-		{"192.168.1.5:5000", "allsky.local", "https://evil.example.com", http.MethodPost, 403},
+		{"192.168.1.5:5000", "skycam.local", "https://evil.example.com", http.MethodPost, 403},
 	} {
 		req := httptest.NewRequest(c.method, "http://"+c.host+"/settings", strings.NewReader(""))
 		req.RemoteAddr, req.Host = c.remote, c.host

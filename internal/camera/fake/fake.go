@@ -1,5 +1,5 @@
 // Package fake is a Camera that replays a folder of JPEGs — typically a
-// night copied from allsky.local/images/<YYYYMMDD>/. It lets the whole
+// night copied from skycam.local/images/<YYYYMMDD>/. It lets the whole
 // pipeline (exposure, overlay, timelapse, report) run on a PC.
 //
 // Each source frame stands for what the real camera saw at RefExposure and

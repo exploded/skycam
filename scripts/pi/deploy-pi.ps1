@@ -1,8 +1,8 @@
 # deploy-pi.ps1 - build skycam for the Pi and install it.
-#   .\scripts\pi\deploy-pi.ps1                       # to james@allsky.local
+#   .\scripts\pi\deploy-pi.ps1                       # to james@skycam.local
 #   .\scripts\pi\deploy-pi.ps1 -Target pi@10.0.0.42
 # The first run also provisions the Pi (packages, SDK, udev, user, service).
-param([string]$Target = "james@allsky.local")
+param([string]$Target = "james@skycam.local")
 $ErrorActionPreference = "Stop"
 $root = Resolve-Path "$PSScriptRoot\..\.."
 $bundle = Join-Path $root "bin\skycam-bundle"
